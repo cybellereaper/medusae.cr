@@ -29,6 +29,9 @@ final class SlashCommandRouter {
     private static final int AUTOCOMPLETE_RESPONSE_TYPE = 8;
     private static final int MODAL_RESPONSE_TYPE = 9;
 
+    private static final String UNHANDLED_INTERACTION_MESSAGE = "This interaction is no longer available. Please try again.";
+    private static final String HANDLER_ERROR_MESSAGE = "Something went wrong while handling this interaction.";
+
     private final Map<String, Consumer<JsonNode>> slashHandlers = new ConcurrentHashMap<>();
     private final Map<String, SlashCommandHandler> slashContextHandlers = new ConcurrentHashMap<>();
     private final Map<String, Consumer<JsonNode>> userContextMenuHandlers = new ConcurrentHashMap<>();
@@ -123,40 +126,64 @@ final class SlashCommandRouter {
         }
 
         int interactionType = interaction.path("type").asInt();
-        switch (interactionType) {
-            case PING_INTERACTION_TYPE -> respond(interaction, PONG_RESPONSE_TYPE, null);
-            case APPLICATION_COMMAND_INTERACTION_TYPE -> handleApplicationCommandInteraction(interaction);
-            case APPLICATION_COMMAND_AUTOCOMPLETE_INTERACTION_TYPE -> dispatchRawAndContextByName(
-                    interaction,
-                    autocompleteHandlers,
-                    autocompleteContextHandlers,
-                    "name",
-                    this::toSlashCommandInteraction,
-                    SlashCommandHandler::handle
-            );
-            case MESSAGE_COMPONENT_INTERACTION_TYPE -> dispatchRawAndContextByNameOrPrefix(
-                    interaction,
-                    componentHandlers,
-                    componentContextHandlers,
-                    componentPrefixHandlers,
-                    componentPrefixContextHandlers,
-                    "custom_id",
-                    this::toInteractionContext,
-                    InteractionHandler::handle
-            );
-            case MODAL_SUBMIT_INTERACTION_TYPE -> dispatchRawAndContextByNameOrPrefix(
-                    interaction,
-                    modalHandlers,
-                    modalContextHandlers,
-                    modalPrefixHandlers,
-                    modalPrefixContextHandlers,
-                    "custom_id",
-                    this::toModalSubmitInteraction,
-                    ModalSubmitHandler::handle
-            );
-            default -> {
-                // no-op for unsupported interaction types
+        try {
+            switch (interactionType) {
+                case PING_INTERACTION_TYPE -> respond(interaction, PONG_RESPONSE_TYPE, null);
+                case APPLICATION_COMMAND_INTERACTION_TYPE -> {
+                    if (!handleApplicationCommandInteraction(interaction)) {
+                        safeRespondEphemeral(interaction, UNHANDLED_INTERACTION_MESSAGE);
+                    }
+                }
+                case APPLICATION_COMMAND_AUTOCOMPLETE_INTERACTION_TYPE -> {
+                    boolean handled = dispatchRawAndContextByName(
+                            interaction,
+                            autocompleteHandlers,
+                            autocompleteContextHandlers,
+                            "name",
+                            this::toSlashCommandInteraction,
+                            SlashCommandHandler::handle
+                    );
+                    if (!handled) {
+                        safeRespondAutocomplete(interaction);
+                    }
+                }
+                case MESSAGE_COMPONENT_INTERACTION_TYPE -> {
+                    boolean handled = dispatchRawAndContextByNameOrPrefix(
+                            interaction,
+                            componentHandlers,
+                            componentContextHandlers,
+                            componentPrefixHandlers,
+                            componentPrefixContextHandlers,
+                            "custom_id",
+                            this::toInteractionContext,
+                            InteractionHandler::handle
+                    );
+                    if (!handled) {
+                        safeRespondEphemeral(interaction, UNHANDLED_INTERACTION_MESSAGE);
+                    }
+                }
+                case MODAL_SUBMIT_INTERACTION_TYPE -> {
+                    boolean handled = dispatchRawAndContextByNameOrPrefix(
+                            interaction,
+                            modalHandlers,
+                            modalContextHandlers,
+                            modalPrefixHandlers,
+                            modalPrefixContextHandlers,
+                            "custom_id",
+                            this::toModalSubmitInteraction,
+                            ModalSubmitHandler::handle
+                    );
+                    if (!handled) {
+                        safeRespondEphemeral(interaction, UNHANDLED_INTERACTION_MESSAGE);
+                    }
+                }
+                default -> {
+                    // no-op for unsupported interaction types
+                }
             }
+        } catch (RuntimeException handlerError) {
+            System.err.println("Failed to handle interaction: " + handlerError.getMessage());
+            safeRespondEphemeral(interaction, HANDLER_ERROR_MESSAGE);
         }
     }
 
@@ -247,10 +274,10 @@ final class SlashCommandRouter {
         return null;
     }
 
-    private void handleApplicationCommandInteraction(JsonNode interaction) {
+    private boolean handleApplicationCommandInteraction(JsonNode interaction) {
         int commandType = interaction.path("data").path("type").asInt(CHAT_INPUT_COMMAND_TYPE);
         if (commandType == USER_CONTEXT_COMMAND_TYPE) {
-            dispatchRawAndContextByName(
+            return dispatchRawAndContextByName(
                     interaction,
                     userContextMenuHandlers,
                     userContextMenuContextHandlers,
@@ -258,11 +285,10 @@ final class SlashCommandRouter {
                     this::toInteractionContext,
                     InteractionHandler::handle
             );
-            return;
         }
 
         if (commandType == MESSAGE_CONTEXT_COMMAND_TYPE) {
-            dispatchRawAndContextByName(
+            return dispatchRawAndContextByName(
                     interaction,
                     messageContextMenuHandlers,
                     messageContextMenuContextHandlers,
@@ -270,10 +296,9 @@ final class SlashCommandRouter {
                     this::toInteractionContext,
                     InteractionHandler::handle
             );
-            return;
         }
 
-        dispatchRawAndContextByName(
+        return dispatchRawAndContextByName(
                 interaction,
                 slashHandlers,
                 slashContextHandlers,
@@ -283,7 +308,7 @@ final class SlashCommandRouter {
         );
     }
 
-    private <H, C> void dispatchRawAndContextByName(
+    private <H, C> boolean dispatchRawAndContextByName(
             JsonNode interaction,
             Map<String, Consumer<JsonNode>> rawHandlers,
             Map<String, H> contextHandlers,
@@ -291,7 +316,7 @@ final class SlashCommandRouter {
             Function<JsonNode, C> contextFactory,
             BiConsumer<H, C> contextInvoker
     ) {
-        dispatchRawAndContextByNameOrPrefix(
+        return dispatchRawAndContextByNameOrPrefix(
                 interaction,
                 rawHandlers,
                 contextHandlers,
@@ -303,7 +328,7 @@ final class SlashCommandRouter {
         );
     }
 
-    private <H, C> void dispatchRawAndContextByNameOrPrefix(
+    private <H, C> boolean dispatchRawAndContextByNameOrPrefix(
             JsonNode interaction,
             Map<String, Consumer<JsonNode>> rawHandlers,
             Map<String, H> contextHandlers,
@@ -319,8 +344,10 @@ final class SlashCommandRouter {
         if (rawHandler == null) {
             rawHandler = findPrefixHandler(prefixRawHandlers, handlerKey);
         }
+        boolean handled = false;
         if (rawHandler != null) {
             rawHandler.accept(interaction);
+            handled = true;
         }
 
         H contextHandler = contextHandlers.get(handlerKey);
@@ -328,11 +355,28 @@ final class SlashCommandRouter {
             contextHandler = findPrefixHandler(prefixContextHandlers, handlerKey);
         }
         if (contextHandler == null) {
-            return;
+            return handled;
         }
 
         C context = contextFactory.apply(interaction);
         contextInvoker.accept(contextHandler, context);
+        return true;
+    }
+
+    private void safeRespondEphemeral(JsonNode interaction, String content) {
+        try {
+            respondEphemeral(interaction, content);
+        } catch (RuntimeException responseError) {
+            System.err.println("Failed to send interaction fallback response: " + responseError.getMessage());
+        }
+    }
+
+    private void safeRespondAutocomplete(JsonNode interaction) {
+        try {
+            respondWithAutocompleteChoices(interaction, List.of());
+        } catch (RuntimeException responseError) {
+            System.err.println("Failed to send autocomplete fallback response: " + responseError.getMessage());
+        }
     }
 
     private <H> H findPrefixHandler(List<PrefixHandler<H>> handlers, String key) {

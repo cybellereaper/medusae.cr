@@ -502,6 +502,60 @@ class SlashCommandRouterTest {
         assertEquals(1, secondCount.get());
     }
 
+
+    @Test
+    void respondsEphemeralWhenSlashCommandHasNoRegisteredHandler() throws Exception {
+        AtomicReference<Integer> responseType = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> responseData = new AtomicReference<>();
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+            responseType.set(type);
+            responseData.set(data);
+        });
+
+        router.handleInteraction(interactionPayload(2, "unknown", null, "123", "abc", null, 1));
+
+        assertEquals(4, responseType.get());
+        assertEquals("This interaction is no longer available. Please try again.", responseData.get().get("content"));
+        assertEquals(64, responseData.get().get("flags"));
+    }
+
+    @Test
+    void respondsWithEmptyAutocompleteChoicesWhenHandlerMissing() throws Exception {
+        AtomicReference<Integer> responseType = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> responseData = new AtomicReference<>();
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+            responseType.set(type);
+            responseData.set(data);
+        });
+
+        router.handleInteraction(interactionPayload(4, "unknown", null, "123", "abc", "he", null));
+
+        assertEquals(8, responseType.get());
+        assertEquals(List.of(), responseData.get().get("choices"));
+    }
+
+    @Test
+    void respondsEphemeralWhenHandlerThrowsRuntimeException() throws Exception {
+        AtomicReference<Integer> responseType = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> responseData = new AtomicReference<>();
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+            responseType.set(type);
+            responseData.set(data);
+        });
+        router.registerSlashHandler("explode", ignored -> {
+            throw new IllegalStateException("boom");
+        });
+
+        router.handleInteraction(interactionPayload(2, "explode", null, "123", "abc", null, 1));
+
+        assertEquals(4, responseType.get());
+        assertEquals("Something went wrong while handling this interaction.", responseData.get().get("content"));
+        assertEquals(64, responseData.get().get("flags"));
+    }
+
     @Test
     void respondWithMessageRequiresIdAndToken() throws Exception {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
