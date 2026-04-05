@@ -8,6 +8,11 @@ Jellycord is a lightweight Java client for building Discord bots using both the 
 - Slash commands, context menus, autocomplete, component interactions, and modals
 - Message builders for embeds and components
 - REST helpers for common Discord resources through `DiscordApi`
+- Configurable retry/backoff for transient REST failures
+- Rate-limit observability hooks (`RateLimitObserver`)
+- Optional in-memory state cache for guild/channel/member snapshots
+- Attachment upload convenience helpers
+- Voice transport primitives for gateway/audio frame workflows
 
 ## Installation
 
@@ -98,6 +103,35 @@ For custom calls, use:
 
 ```java
 JsonNode response = client.api().request("GET", "/guilds/1234567890", null);
+```
+
+
+## Advanced REST + Reliability
+
+```java
+RateLimitObserver observer = new RateLimitObserver() {
+    @Override
+    public void onRetryScheduled(String method, String path, int attempt, Duration backoff, String reason) {
+        System.out.println("retry " + method + " " + path + " attempt=" + attempt + " cause=" + reason);
+    }
+};
+
+DiscordClient client = DiscordClient.create(
+        config,
+        RetryPolicy.defaultPolicy(),
+        observer,
+        true // enable state cache
+);
+```
+
+Use attachment uploads:
+
+```java
+client.sendMessageWithAttachments(
+        "123",
+        DiscordMessage.ofContent("upload"),
+        List.of(DiscordAttachment.fromPath(Path.of("/tmp/demo.png")))
+);
 ```
 
 ## Running tests

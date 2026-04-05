@@ -3,13 +3,24 @@ package com.github.cybellereaper.http;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.net.http.HttpHeaders;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.LockSupport;
 
 public final class RateLimitManager {
     private final Map<String, Instant> blockedUntilByBucket = new ConcurrentHashMap<>();
+    private final RateLimitObserver observer;
+
+    public RateLimitManager() {
+        this(RateLimitObserver.NOOP);
+    }
+
+    public RateLimitManager(RateLimitObserver observer) {
+        this.observer = Objects.requireNonNull(observer, "observer");
+    }
 
     public void await(String bucketId) {
         Instant blockedUntil = blockedUntilByBucket.get(bucketId);
@@ -33,17 +44,22 @@ public final class RateLimitManager {
                 .orElse(0d);
 
         if (remaining == 0 && resetAfterSeconds > 0) {
-            blockFor(bucketId, resetAfterSeconds);
+            blockFor(bucketId, resetAfterSeconds, "headers");
         }
     }
 
-    public void updateFrom429(String bucketId, JsonNode body) {
+    public double updateFrom429(String bucketId, JsonNode body) {
         double retryAfterSeconds = body.path("retry_after").asDouble(1.0d);
-        blockFor(bucketId, retryAfterSeconds);
+        boolean global = body.path("global").asBoolean(false);
+        Duration retryAfter = Duration.ofMillis(Math.max(1, Math.round(retryAfterSeconds * 1000)));
+        observer.onRateLimitedResponse(bucketId, retryAfter, global, 429);
+        blockFor(bucketId, retryAfterSeconds, "429");
+        return retryAfterSeconds;
     }
 
-    private void blockFor(String bucketId, double seconds) {
+    private void blockFor(String bucketId, double seconds, String source) {
         long millis = Math.max(1L, Math.round(seconds * 1000));
         blockedUntilByBucket.put(bucketId, Instant.now().plusMillis(millis));
+        observer.onBucketBlocked(bucketId, Duration.ofMillis(millis), source);
     }
 }

@@ -5,10 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.gateway.DiscordGatewayClient;
 import com.github.cybellereaper.gateway.DiscordGatewayClient.EventDeserializer;
 import com.github.cybellereaper.http.DiscordRestClient;
+import com.github.cybellereaper.http.RateLimitObserver;
+import com.github.cybellereaper.http.RetryPolicy;
 
 import java.net.http.HttpClient;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public final class DiscordClient implements AutoCloseable {
@@ -16,25 +19,38 @@ public final class DiscordClient implements AutoCloseable {
     private final DiscordGatewayClient gatewayClient;
     private final SlashCommandRouter slashCommandRouter;
     private final DiscordApi api;
+    private final DiscordStateCache stateCache;
 
     private volatile String applicationId;
 
-    private DiscordClient(DiscordRestClient restClient, DiscordGatewayClient gatewayClient) {
+    private DiscordClient(DiscordRestClient restClient, DiscordGatewayClient gatewayClient, DiscordStateCache stateCache) {
         this.restClient = restClient;
         this.gatewayClient = gatewayClient;
         this.slashCommandRouter = new SlashCommandRouter(restClient::createInteractionResponse);
         this.api = new DiscordApi(restClient);
+        this.stateCache = stateCache;
         this.gatewayClient.on("INTERACTION_CREATE", slashCommandRouter::handleInteraction);
+        registerCacheListeners();
     }
 
     public static DiscordClient create(DiscordClientConfig config) {
+        return create(config, RetryPolicy.defaultPolicy(), RateLimitObserver.NOOP, false);
+    }
+
+    public static DiscordClient create(
+            DiscordClientConfig config,
+            RetryPolicy retryPolicy,
+            RateLimitObserver rateLimitObserver,
+            boolean enableStateCache
+    ) {
         HttpClient httpClient = HttpClient.newBuilder().build();
         ObjectMapper objectMapper = new ObjectMapper();
 
-        DiscordRestClient restClient = new DiscordRestClient(httpClient, objectMapper, config);
+        DiscordRestClient restClient = new DiscordRestClient(httpClient, objectMapper, config, retryPolicy, rateLimitObserver);
         DiscordGatewayClient gatewayClient = new DiscordGatewayClient(httpClient, objectMapper, config, restClient);
 
-        return new DiscordClient(restClient, gatewayClient);
+        DiscordStateCache stateCache = enableStateCache ? new DiscordStateCache() : null;
+        return new DiscordClient(restClient, gatewayClient, stateCache);
     }
 
     public void login() {
@@ -92,6 +108,10 @@ public final class DiscordClient implements AutoCloseable {
 
     public DiscordApi api() {
         return api;
+    }
+
+    public Optional<DiscordStateCache> stateCache() {
+        return Optional.ofNullable(stateCache);
     }
 
     public JsonNode registerGlobalSlashCommand(String commandName, String description) {
@@ -193,6 +213,13 @@ public final class DiscordClient implements AutoCloseable {
         restClient.sendMessage(channelId, message.toPayload());
     }
 
+    public void sendMessageWithAttachments(String channelId, DiscordMessage message, List<DiscordAttachment> attachments) {
+        requireNonBlank(channelId, "channelId");
+        Objects.requireNonNull(message, "message");
+        Objects.requireNonNull(attachments, "attachments");
+        restClient.sendMessageWithAttachments(channelId, message.toPayload(), attachments);
+    }
+
     public void sendMessageWithEmbeds(String channelId, String content, List<DiscordEmbed> embeds) {
         sendMessage(channelId, DiscordMessage.ofEmbeds(content, embeds));
     }
@@ -207,6 +234,23 @@ public final class DiscordClient implements AutoCloseable {
         for (SlashCommandDefinition command : commands) {
             registrar.accept(command);
         }
+    }
+
+    private void registerCacheListeners() {
+        if (stateCache == null) {
+            return;
+        }
+
+        gatewayClient.on("GUILD_CREATE", stateCache::putGuild);
+        gatewayClient.on("CHANNEL_CREATE", stateCache::putChannel);
+        gatewayClient.on("CHANNEL_UPDATE", stateCache::putChannel);
+        gatewayClient.on("GUILD_MEMBER_ADD", stateCache::putMember);
+        gatewayClient.on("GUILD_MEMBER_UPDATE", stateCache::putMember);
+        gatewayClient.on("GUILD_MEMBER_REMOVE", payload -> {
+            String guildId = payload.path("guild_id").asText("");
+            String userId = payload.path("user").path("id").asText("");
+            stateCache.removeMember(guildId, userId);
+        });
     }
 
     private String resolveApplicationId() {
