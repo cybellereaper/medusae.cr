@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class DiscordRestClient {
@@ -56,7 +57,15 @@ public final class DiscordRestClient {
     }
 
     public JsonNode createGlobalApplicationCommand(String applicationId, SlashCommandDefinition command) {
+        validateCommandContext(applicationId, command);
         return request("POST", "/applications/" + applicationId + "/commands", command.toRequestPayload());
+    }
+
+    public JsonNode createGuildApplicationCommand(String applicationId, String guildId, SlashCommandDefinition command) {
+        validateCommandContext(applicationId, command);
+        requireNonBlank(guildId, "guildId");
+
+        return request("POST", "/applications/" + applicationId + "/guilds/" + guildId + "/commands", command.toRequestPayload());
     }
 
     public JsonNode createInteractionResponse(String interactionId, String interactionToken, int type, Map<String, Object> data) {
@@ -104,6 +113,18 @@ public final class DiscordRestClient {
             }
 
             return readJson(response.body());
+        }
+    }
+
+    private static void validateCommandContext(String applicationId, SlashCommandDefinition command) {
+        requireNonBlank(applicationId, "applicationId");
+        Objects.requireNonNull(command, "command");
+    }
+
+    private static void requireNonBlank(String value, String name) {
+        Objects.requireNonNull(value, name);
+        if (value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
         }
     }
 

@@ -8,6 +8,7 @@ import java.util.List;
 
 void main() throws Exception {
     String token = System.getenv("DISCORD_BOT_TOKEN");
+    String guildId = System.getenv("DISCORD_GUILD_ID");
 
     DiscordClientConfig config = DiscordClientConfig.builder(token)
             .intents(GatewayIntent.combine(
@@ -18,14 +19,20 @@ void main() throws Exception {
             .build();
 
     try (DiscordClient client = DiscordClient.create(config)) {
-        client.registerGlobalSlashCommands(List.of(
+        List<SlashCommandDefinition> commands = List.of(
                 SlashCommandDefinition.simple("ping", "Reply with pong"),
                 new SlashCommandDefinition(
                         "echo",
                         "Echo input text back",
                         List.of(SlashCommandOptionDefinition.string("text", "Text to echo", true))
                 )
-        ));
+        );
+
+        if (guildId == null || guildId.isBlank()) {
+            client.registerGlobalSlashCommands(commands);
+        } else {
+            client.registerGuildSlashCommands(guildId, commands);
+        }
 
         client.on("MESSAGE_CREATE", message -> {
             String content = message.path("content").asText("");

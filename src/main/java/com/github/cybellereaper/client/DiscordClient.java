@@ -15,6 +15,8 @@ public final class DiscordClient implements AutoCloseable {
     private final DiscordGatewayClient gatewayClient;
     private final SlashCommandRouter slashCommandRouter;
 
+    private volatile String applicationId;
+
     private DiscordClient(DiscordRestClient restClient, DiscordGatewayClient gatewayClient) {
         this.restClient = restClient;
         this.gatewayClient = gatewayClient;
@@ -58,16 +60,27 @@ public final class DiscordClient implements AutoCloseable {
 
     public JsonNode registerGlobalSlashCommand(SlashCommandDefinition command) {
         Objects.requireNonNull(command, "command");
-
-        String applicationId = restClient.getCurrentApplicationId();
-        return restClient.createGlobalApplicationCommand(applicationId, command);
+        return restClient.createGlobalApplicationCommand(resolveApplicationId(), command);
     }
 
     public void registerGlobalSlashCommands(List<SlashCommandDefinition> commands) {
-        Objects.requireNonNull(commands, "commands");
-        for (SlashCommandDefinition command : commands) {
-            registerGlobalSlashCommand(command);
-        }
+        registerCommands(commands, this::registerGlobalSlashCommand);
+    }
+
+    public JsonNode registerGuildSlashCommand(String guildId, String commandName, String description) {
+        return registerGuildSlashCommand(guildId, SlashCommandDefinition.simple(commandName, description));
+    }
+
+    public JsonNode registerGuildSlashCommand(String guildId, SlashCommandDefinition command) {
+        requireNonBlank(guildId, "guildId");
+        Objects.requireNonNull(command, "command");
+
+        return restClient.createGuildApplicationCommand(resolveApplicationId(), guildId, command);
+    }
+
+    public void registerGuildSlashCommands(String guildId, List<SlashCommandDefinition> commands) {
+        requireNonBlank(guildId, "guildId");
+        registerCommands(commands, command -> registerGuildSlashCommand(guildId, command));
     }
 
     public void respondWithMessage(JsonNode interaction, String content) {
@@ -97,5 +110,33 @@ public final class DiscordClient implements AutoCloseable {
     @Override
     public void close() {
         gatewayClient.close();
+    }
+
+    private void registerCommands(List<SlashCommandDefinition> commands, Consumer<SlashCommandDefinition> registrar) {
+        Objects.requireNonNull(commands, "commands");
+        for (SlashCommandDefinition command : commands) {
+            registrar.accept(command);
+        }
+    }
+
+    private String resolveApplicationId() {
+        String current = applicationId;
+        if (current != null && !current.isBlank()) {
+            return current;
+        }
+
+        synchronized (this) {
+            if (applicationId == null || applicationId.isBlank()) {
+                applicationId = restClient.getCurrentApplicationId();
+            }
+            return applicationId;
+        }
+    }
+
+    private static void requireNonBlank(String value, String fieldName) {
+        Objects.requireNonNull(value, fieldName);
+        if (value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
     }
 }
