@@ -120,6 +120,39 @@ client.onModalSubmit("feedback_modal", interaction -> {
 });
 ```
 
+## Typed Interaction Handlers (Context + Parameters)
+
+In addition to raw `JsonNode` handlers, you can use typed context handlers to access metadata and parameters safely:
+
+```java
+client.onSlashCommandContext("echo", interaction -> {
+    String guildId = interaction.context().guildId();
+    String userId = interaction.context().userId();
+    String text = interaction.parameters().requireString("text");
+
+    client.respondEphemeral(
+            interaction.context(),
+            "Guild: " + guildId + ", User: " + userId + ", Text: " + text
+    );
+});
+
+client.onAutocompleteContext("echo", interaction -> {
+    String prefix = interaction.parameters().getString("text");
+    String safePrefix = prefix == null ? "" : prefix.toLowerCase();
+    List<AutocompleteChoice> choices = List.of("hello", "hey", "hola").stream()
+            .filter(choice -> choice.startsWith(safePrefix))
+            .map(choice -> new AutocompleteChoice(choice, choice))
+            .toList();
+
+    client.respondWithAutocompleteChoices(interaction.context(), choices);
+});
+
+client.onModalSubmitContext("feedback_modal", interaction -> {
+    String feedback = interaction.parameters().requireString("feedback_text");
+    client.respondEphemeral(interaction.context(), "Thanks for your feedback: " + feedback);
+});
+```
+
 ## REST API Helper
 
 Use `client.api()` for convenient access to common REST resources:

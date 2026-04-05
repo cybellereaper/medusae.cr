@@ -43,6 +43,11 @@ void main() throws Exception {
                         "Echo input text back",
                         List.of(SlashCommandOptionDefinition.autocompletedString("text", "Text to echo", true))
                 ),
+                new SlashCommandDefinition(
+                        "echo_typed",
+                        "Echo input text back with typed handler",
+                        List.of(SlashCommandOptionDefinition.string("text", "Text to echo", true))
+                ),
                 SlashCommandDefinition.userContextMenu("Inspect User"),
                 SlashCommandDefinition.messageContextMenu("Quote Message")
         );
@@ -147,6 +152,19 @@ void main() throws Exception {
                         new DiscordEmbed("Feedback", "Received successfully", 0x57F287)
                                 .withThumbnail("https://cdn.discordapp.com/embed/avatars/1.png")
                 )));
+
+        client.onSlashCommandContext("echo_typed", interaction -> {
+            String text = interaction.parameters().getString("text");
+            if (text == null || text.isBlank()) {
+                client.respondEphemeral(interaction.context(), "Missing required option: text");
+                return;
+            }
+
+            client.respondEphemeral(
+                    interaction.context(),
+                    "Typed handler from user " + interaction.context().userId() + ": " + text
+            );
+        });
 
         client.login();
         Thread.currentThread().join();

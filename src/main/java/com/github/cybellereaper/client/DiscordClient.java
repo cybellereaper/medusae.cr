@@ -70,24 +70,48 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerSlashHandler(commandName, listener);
     }
 
+    public void onSlashCommandContext(String commandName, SlashCommandHandler listener) {
+        slashCommandRouter.registerSlashContextHandler(commandName, listener);
+    }
+
     public void onAutocomplete(String commandName, Consumer<JsonNode> listener) {
         slashCommandRouter.registerAutocompleteHandler(commandName, listener);
+    }
+
+    public void onAutocompleteContext(String commandName, SlashCommandHandler listener) {
+        slashCommandRouter.registerAutocompleteContextHandler(commandName, listener);
     }
 
     public void onUserContextMenu(String commandName, Consumer<JsonNode> listener) {
         slashCommandRouter.registerUserContextMenuHandler(commandName, listener);
     }
 
+    public void onUserContextMenuContext(String commandName, InteractionHandler listener) {
+        slashCommandRouter.registerUserContextMenuContextHandler(commandName, listener);
+    }
+
     public void onMessageContextMenu(String commandName, Consumer<JsonNode> listener) {
         slashCommandRouter.registerMessageContextMenuHandler(commandName, listener);
+    }
+
+    public void onMessageContextMenuContext(String commandName, InteractionHandler listener) {
+        slashCommandRouter.registerMessageContextMenuContextHandler(commandName, listener);
     }
 
     public void onComponentInteraction(String customId, Consumer<JsonNode> listener) {
         slashCommandRouter.registerComponentHandler(customId, listener);
     }
 
+    public void onComponentInteractionContext(String customId, InteractionHandler listener) {
+        slashCommandRouter.registerComponentContextHandler(customId, listener);
+    }
+
     public void onModalSubmit(String customId, Consumer<JsonNode> listener) {
         slashCommandRouter.registerModalHandler(customId, listener);
+    }
+
+    public void onModalSubmitContext(String customId, ModalSubmitHandler listener) {
+        slashCommandRouter.registerModalContextHandler(customId, listener);
     }
 
     public DiscordApi api() {
@@ -143,44 +167,99 @@ public final class DiscordClient implements AutoCloseable {
         respondWithMessage(interaction, DiscordMessage.ofContent(content));
     }
 
+    public void respondWithMessage(InteractionContext interaction, String content) {
+        Objects.requireNonNull(interaction, "interaction");
+        respondWithMessage(interaction.raw(), content);
+    }
+
     public void respondWithMessage(JsonNode interaction, DiscordMessage message) {
         slashCommandRouter.respondWithMessage(interaction, message);
+    }
+
+    public void respondWithMessage(InteractionContext interaction, DiscordMessage message) {
+        Objects.requireNonNull(interaction, "interaction");
+        respondWithMessage(interaction.raw(), message);
     }
 
     public void respondWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
         slashCommandRouter.respondWithEmbeds(interaction, content, embeds);
     }
 
+    public void respondWithEmbeds(InteractionContext interaction, String content, List<DiscordEmbed> embeds) {
+        Objects.requireNonNull(interaction, "interaction");
+        respondWithEmbeds(interaction.raw(), content, embeds);
+    }
+
     public void respondEphemeral(JsonNode interaction, String content) {
         slashCommandRouter.respondEphemeral(interaction, content);
+    }
+
+    public void respondEphemeral(InteractionContext interaction, String content) {
+        Objects.requireNonNull(interaction, "interaction");
+        respondEphemeral(interaction.raw(), content);
     }
 
     public void respondEphemeralWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
         slashCommandRouter.respondEphemeralWithEmbeds(interaction, content, embeds);
     }
 
+    public void respondEphemeralWithEmbeds(InteractionContext interaction, String content, List<DiscordEmbed> embeds) {
+        Objects.requireNonNull(interaction, "interaction");
+        respondEphemeralWithEmbeds(interaction.raw(), content, embeds);
+    }
+
     public void respondWithModal(JsonNode interaction, DiscordModal modal) {
         slashCommandRouter.respondWithModal(interaction, modal);
+    }
+
+    public void respondWithModal(InteractionContext interaction, DiscordModal modal) {
+        Objects.requireNonNull(interaction, "interaction");
+        respondWithModal(interaction.raw(), modal);
     }
 
     public void respondWithAutocompleteChoices(JsonNode interaction, List<AutocompleteChoice> choices) {
         slashCommandRouter.respondWithAutocompleteChoices(interaction, choices);
     }
 
+    public void respondWithAutocompleteChoices(InteractionContext interaction, List<AutocompleteChoice> choices) {
+        Objects.requireNonNull(interaction, "interaction");
+        respondWithAutocompleteChoices(interaction.raw(), choices);
+    }
+
     public void deferMessage(JsonNode interaction) {
         slashCommandRouter.deferMessage(interaction);
+    }
+
+    public void deferMessage(InteractionContext interaction) {
+        Objects.requireNonNull(interaction, "interaction");
+        deferMessage(interaction.raw());
     }
 
     public void deferUpdate(JsonNode interaction) {
         slashCommandRouter.deferUpdate(interaction);
     }
 
+    public void deferUpdate(InteractionContext interaction) {
+        Objects.requireNonNull(interaction, "interaction");
+        deferUpdate(interaction.raw());
+    }
+
     public String getStringOption(JsonNode interaction, String optionName) {
         return slashCommandRouter.getOptionString(interaction, optionName);
     }
 
+    public String getStringOption(SlashCommandInteraction interaction, String optionName) {
+        Objects.requireNonNull(interaction, "interaction");
+        return interaction.parameters().getString(optionName);
+    }
+
     public String getModalValue(JsonNode interaction, String customId) {
         return slashCommandRouter.getModalValue(interaction, customId);
+    }
+
+    public String getModalValue(ModalSubmitInteraction interaction, String customId) {
+        Objects.requireNonNull(interaction, "interaction");
+        return interaction.parameters().getString(customId);
     }
 
     public void sendMessage(String channelId, String content) {

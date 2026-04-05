@@ -60,8 +60,36 @@ client.on("MESSAGE_DELETE", MessageDeleteEvent.class,
 - `respondWithModal(JsonNode, DiscordModal)`
 - `deferMessage(...)`
 - `deferUpdate(...)`
+- `respondWithMessage(InteractionContext, ...)`
+- `respondWithEmbeds(InteractionContext, ...)`
+- `respondEphemeral(InteractionContext, ...)`
+- `respondWithAutocompleteChoices(InteractionContext, ...)`
+- `respondWithModal(InteractionContext, DiscordModal)`
+- `deferMessage(InteractionContext)`
+- `deferUpdate(InteractionContext)`
 
 - `getModalValue(JsonNode, String)` for modal submit field extraction.
+- `getModalValue(ModalSubmitInteraction, String)` for typed modal extraction.
+- `getStringOption(SlashCommandInteraction, String)` for typed option extraction.
+
+### Typed interaction handler registration
+
+- `onSlashCommandContext(String, SlashCommandHandler)`
+- `onAutocompleteContext(String, SlashCommandHandler)`
+- `onUserContextMenuContext(String, InteractionHandler)`
+- `onMessageContextMenuContext(String, InteractionHandler)`
+- `onComponentInteractionContext(String, InteractionHandler)`
+- `onModalSubmitContext(String, ModalSubmitHandler)`
+
+Example:
+
+```java
+client.onSlashCommandContext("echo", interaction -> {
+    String userId = interaction.context().userId();
+    String text = interaction.parameters().requireString("text");
+    client.respondEphemeral(interaction.context(), "User " + userId + " said: " + text);
+});
+```
 
 ### Message sending
 
