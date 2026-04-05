@@ -2,6 +2,7 @@ import com.github.cybellereaper.client.AutocompleteChoice;
 import com.github.cybellereaper.client.DiscordClient;
 import com.github.cybellereaper.client.DiscordClientConfig;
 import com.github.cybellereaper.client.DiscordEmbed;
+import com.github.cybellereaper.client.DiscordMessage;
 import com.github.cybellereaper.client.SlashCommandDefinition;
 import com.github.cybellereaper.client.SlashCommandOptionDefinition;
 import com.github.cybellereaper.gateway.GatewayIntent;
@@ -41,15 +42,18 @@ void main() throws Exception {
             String channelId = message.path("channel_id").asText();
 
             if ("!ping".equals(content)) {
-                client.sendMessageWithEmbeds(channelId, "pong", List.of(
+                client.sendMessage(channelId, DiscordMessage.ofEmbeds("pong", List.of(
                         new DiscordEmbed("Legacy Ping", "Handled via message command", 0x57F287)
-                ));
+                                .withImage("https://images.unsplash.com/photo-1516117172878-fd2c41f4a759")
+                )));
             }
         });
 
-        client.onSlashCommand("ping", interaction -> client.respondWithEmbeds(interaction, "pong", List.of(
-                new DiscordEmbed("Slash Ping", "Interaction response", 0x5865F2)
-        )));
+        client.onSlashCommand("ping", interaction -> client.respondWithMessage(interaction,
+                DiscordMessage.ofEmbeds("pong", List.of(
+                        new DiscordEmbed("Slash Ping", "Interaction response", 0x5865F2)
+                                .withThumbnail("https://cdn.discordapp.com/embed/avatars/0.png")
+                ))));
 
         client.onSlashCommand("echo", interaction -> {
             String text = client.getStringOption(interaction, "text");
@@ -58,7 +62,10 @@ void main() throws Exception {
                 return;
             }
 
-            client.respondWithEmbeds(interaction, text, List.of(new DiscordEmbed("Echo", text, 0xFEE75C)));
+            client.respondWithEmbeds(interaction, text, List.of(
+                    new DiscordEmbed("Echo", text, 0xFEE75C)
+                            .withUrl("https://discord.com/developers/docs")
+            ));
         });
 
         client.onAutocomplete("echo", interaction -> {
@@ -77,6 +84,7 @@ void main() throws Exception {
         client.onModalSubmit("feedback_modal", interaction ->
                 client.respondEphemeralWithEmbeds(interaction, "Thanks for the feedback!", List.of(
                         new DiscordEmbed("Feedback", "Received successfully", 0x57F287)
+                                .withThumbnail("https://cdn.discordapp.com/embed/avatars/1.png")
                 )));
 
         client.login();
