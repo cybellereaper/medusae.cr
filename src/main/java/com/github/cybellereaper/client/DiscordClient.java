@@ -17,6 +17,7 @@ public final class DiscordClient implements AutoCloseable {
     private final SlashCommandRouter slashCommandRouter;
     private final DiscordApi api;
     private final CommandOperationBacklog commandBacklog = new CommandOperationBacklog();
+    private final BatchOperationExecutor batchOperationExecutor = new BatchOperationExecutor();
 
     private volatile String applicationId;
 
@@ -326,10 +327,7 @@ public final class DiscordClient implements AutoCloseable {
     }
 
     private void registerCommands(List<SlashCommandDefinition> commands, Consumer<SlashCommandDefinition> registrar) {
-        Objects.requireNonNull(commands, "commands");
-        for (SlashCommandDefinition command : commands) {
-            registrar.accept(command);
-        }
+        batchOperationExecutor.executeAll(commands, registrar);
     }
 
     private void deleteExistingGlobalCommands(String applicationId) {
