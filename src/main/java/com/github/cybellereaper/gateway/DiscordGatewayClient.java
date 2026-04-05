@@ -10,11 +10,11 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public final class DiscordGatewayClient implements WebSocket.Listener, AutoCloseable {
@@ -22,11 +22,11 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     private final ObjectMapper objectMapper;
     private final DiscordClientConfig config;
     private final DiscordRestClient restClient;
+    private final ExecutorService listenerExecutor;
+    private final ScheduledExecutorService scheduler;
 
     private final Map<String, CopyOnWriteArrayList<Consumer<JsonNode>>> listeners = new ConcurrentHashMap<>();
     private final Map<String, CopyOnWriteArrayList<TypedEventListener<?>>> typedListeners = new ConcurrentHashMap<>();
-    private final ScheduledExecutorService scheduler =
-            Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("discord25-heartbeat-", 0).factory());
 
     private final StringBuilder textBuffer = new StringBuilder();
 
@@ -38,6 +38,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     private volatile boolean heartbeatAcked = true;
     private volatile boolean resumeOnReconnect = false;
     private volatile ScheduledFuture<?> heartbeatTask;
+    private final AtomicBoolean reconnecting = new AtomicBoolean(false);
 
     public DiscordGatewayClient(
             HttpClient httpClient,
@@ -45,10 +46,30 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             DiscordClientConfig config,
             DiscordRestClient restClient
     ) {
+        this(
+                httpClient,
+                objectMapper,
+                config,
+                restClient,
+                Executors.newThreadPerTaskExecutor(Thread.ofVirtual().name("discord25-event-", 0).factory()),
+                Executors.newSingleThreadScheduledExecutor(Thread.ofPlatform().name("discord25-heartbeat-", 0).factory())
+        );
+    }
+
+    DiscordGatewayClient(
+            HttpClient httpClient,
+            ObjectMapper objectMapper,
+            DiscordClientConfig config,
+            DiscordRestClient restClient,
+            ExecutorService listenerExecutor,
+            ScheduledExecutorService scheduler
+    ) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.config = config;
         this.restClient = restClient;
+        this.listenerExecutor = Objects.requireNonNull(listenerExecutor, "listenerExecutor");
+        this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
     }
 
     public void connect() {
@@ -145,7 +166,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         }
 
         if (shouldReconnect(statusCode)) {
-            reconnect();
+            requestReconnect();
         }
 
         return CompletableFuture.completedFuture(null);
@@ -153,7 +174,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
     @Override
     public void onError(WebSocket webSocket, Throwable error) {
-        reconnect();
+        requestReconnect();
     }
 
     private void handlePayload(WebSocket socket, JsonNode payload) {
@@ -170,10 +191,10 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         switch (op) {
             case 0 -> handleDispatch(payload.path("t").asText(), d);
             case 1 -> sendHeartbeat(socket);
-            case 7 -> reconnect();
+            case 7 -> requestReconnect();
             case 9 -> {
                 resumeOnReconnect = d.asBoolean(false);
-                reconnect();
+                requestReconnect();
             }
             case 10 -> {
                 long intervalMillis = d.path("heartbeat_interval").asLong();
@@ -205,17 +226,27 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         List<Consumer<JsonNode>> eventListeners = listeners.get(eventType);
         if (eventListeners != null) {
             for (Consumer<JsonNode> listener : eventListeners) {
-                listener.accept(data);
+                dispatchAsync(() -> listener.accept(data));
             }
         }
 
         List<TypedEventListener<?>> typedEventListeners = typedListeners.get(eventType);
         if (typedEventListeners != null) {
-            Map<TypedEventKey, Object> typedEventCache = new HashMap<>(typedEventListeners.size());
+            Map<TypedEventKey, Object> typedEventCache = new ConcurrentHashMap<>(typedEventListeners.size());
             for (TypedEventListener<?> typedListener : typedEventListeners) {
-                typedListener.accept(data, typedEventCache, objectMapper);
+                dispatchAsync(() -> typedListener.accept(data, typedEventCache, objectMapper));
             }
         }
+    }
+
+    private void dispatchAsync(Runnable task) {
+        listenerExecutor.execute(() -> {
+            try {
+                task.run();
+            } catch (RuntimeException exception) {
+                System.err.println("Gateway event listener failed: " + exception.getMessage());
+            }
+        });
     }
 
     private void startHeartbeat(long intervalMillis) {
@@ -232,12 +263,18 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             }
 
             if (!heartbeatAcked) {
-                reconnect();
+                requestReconnect();
                 return;
             }
 
-            sendHeartbeat(socket);
+            dispatchAsync(() -> sendHeartbeat(socket));
         }, initialDelay, intervalMillis, TimeUnit.MILLISECONDS);
+    }
+
+    private void requestReconnect() {
+        if (reconnecting.compareAndSet(false, true)) {
+            dispatchAsync(this::reconnect);
+        }
     }
 
     private synchronized void reconnect() {
@@ -250,10 +287,15 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
         URI target = (resumeOnReconnect && resumeGatewayUri != null) ? resumeGatewayUri : gatewayUri;
         if (target == null) {
+            reconnecting.set(false);
             return;
         }
 
-        webSocket = connect(target);
+        try {
+            webSocket = connect(target);
+        } finally {
+            reconnecting.set(false);
+        }
     }
 
     private void sendIdentify(WebSocket socket) {
@@ -395,6 +437,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             heartbeatTask.cancel(true);
         }
         scheduler.shutdownNow();
+        listenerExecutor.shutdownNow();
 
         if (webSocket != null) {
             try {

@@ -12,7 +12,13 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.List;
+import java.util.Collections;
+import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,105 +30,123 @@ class DiscordGatewayClientTest {
     void dispatchesTypedEventsUsingRegisteredType() {
         CountingObjectMapper mapper = new CountingObjectMapper();
         DiscordGatewayClient client = gatewayClient(mapper);
+        try {
+            AtomicReference<TestEvent> first = new AtomicReference<>();
+            AtomicReference<TestEvent> second = new AtomicReference<>();
 
-        AtomicReference<TestEvent> first = new AtomicReference<>();
-        AtomicReference<TestEvent> second = new AtomicReference<>();
+            client.on("TEST_EVENT", TestEvent.class, first::set);
+            client.on("TEST_EVENT", TestEvent.class, second::set);
 
-        client.on("TEST_EVENT", TestEvent.class, first::set);
-        client.on("TEST_EVENT", TestEvent.class, second::set);
+            client.onText(new StubWebSocket(), """
+                    {"op":0,"t":"TEST_EVENT","d":{"id":"42","name":"typed"}}
+                    """, true);
 
-        client.onText(new StubWebSocket(), """
-                {"op":0,"t":"TEST_EVENT","d":{"id":"42","name":"typed"}}
-                """, true);
-
-        assertEquals("42", first.get().id());
-        assertEquals("typed", second.get().name());
-        assertEquals(1, mapper.convertCalls.get(), "typed conversion should be cached per class");
+            assertEquals("42", first.get().id());
+            assertEquals("typed", second.get().name());
+            assertEquals(1, mapper.convertCalls.get(), "typed conversion should be cached per class");
+        } finally {
+            client.close();
+        }
     }
 
     @Test
     void dispatchesRawAndTypedListenersForSameEvent() {
         DiscordGatewayClient client = gatewayClient(new ObjectMapper());
+        try {
+            AtomicReference<JsonNode> rawPayload = new AtomicReference<>();
+            AtomicReference<TestEvent> typedPayload = new AtomicReference<>();
 
-        AtomicReference<JsonNode> rawPayload = new AtomicReference<>();
-        AtomicReference<TestEvent> typedPayload = new AtomicReference<>();
+            client.on("TEST_EVENT", rawPayload::set);
+            client.on("TEST_EVENT", TestEvent.class, typedPayload::set);
 
-        client.on("TEST_EVENT", rawPayload::set);
-        client.on("TEST_EVENT", TestEvent.class, typedPayload::set);
+            client.onText(new StubWebSocket(), """
+                    {"op":0,"t":"TEST_EVENT","d":{"id":"7","name":"hello"}}
+                    """, true);
 
-        client.onText(new StubWebSocket(), """
-                {"op":0,"t":"TEST_EVENT","d":{"id":"7","name":"hello"}}
-                """, true);
-
-        assertEquals("7", rawPayload.get().path("id").asText());
-        assertEquals("hello", typedPayload.get().name());
+            assertEquals("7", rawPayload.get().path("id").asText());
+            assertEquals("hello", typedPayload.get().name());
+        } finally {
+            client.close();
+        }
     }
 
     @Test
     void supportsCustomDeserializerAndCachesResultAcrossListeners() {
         DiscordGatewayClient client = gatewayClient(new ObjectMapper());
-        AtomicInteger deserializeCalls = new AtomicInteger(0);
-        AtomicReferenceArray<String> values = new AtomicReferenceArray<>(2);
+        try {
+            AtomicInteger deserializeCalls = new AtomicInteger(0);
+            AtomicReferenceArray<String> values = new AtomicReferenceArray<>(2);
 
-        DiscordGatewayClient.EventDeserializer<String> trimmedContentDeserializer = (rawEvent, ignoredMapper) -> {
-            deserializeCalls.incrementAndGet();
-            return rawEvent.path("content").asText().trim();
-        };
+            DiscordGatewayClient.EventDeserializer<String> trimmedContentDeserializer = (rawEvent, ignoredMapper) -> {
+                deserializeCalls.incrementAndGet();
+                return rawEvent.path("content").asText().trim();
+            };
 
-        client.on("MESSAGE_CREATE", String.class, trimmedContentDeserializer, value -> values.set(0, value));
-        client.on("MESSAGE_CREATE", String.class, trimmedContentDeserializer, value -> values.set(1, value));
+            client.on("MESSAGE_CREATE", String.class, trimmedContentDeserializer, value -> values.set(0, value));
+            client.on("MESSAGE_CREATE", String.class, trimmedContentDeserializer, value -> values.set(1, value));
 
-        client.onText(new StubWebSocket(), """
-                {"op":0,"t":"MESSAGE_CREATE","d":{"content":"  hello  "}}
-                """, true);
+            client.onText(new StubWebSocket(), """
+                    {"op":0,"t":"MESSAGE_CREATE","d":{"content":"  hello  "}}
+                    """, true);
 
-        assertEquals("hello", values.get(0));
-        assertEquals("hello", values.get(1));
-        assertEquals(1, deserializeCalls.get());
+            assertEquals("hello", values.get(0));
+            assertEquals("hello", values.get(1));
+            assertEquals(1, deserializeCalls.get());
+        } finally {
+            client.close();
+        }
     }
 
     @Test
     void canUnsubscribeRawAndTypedListeners() {
         DiscordGatewayClient client = gatewayClient(new ObjectMapper());
-        AtomicInteger rawInvocations = new AtomicInteger(0);
-        AtomicInteger typedInvocations = new AtomicInteger(0);
+        try {
+            AtomicInteger rawInvocations = new AtomicInteger(0);
+            AtomicInteger typedInvocations = new AtomicInteger(0);
 
-        java.util.function.Consumer<JsonNode> rawListener = ignored -> rawInvocations.incrementAndGet();
-        java.util.function.Consumer<TestEvent> typedListener = ignored -> typedInvocations.incrementAndGet();
+            java.util.function.Consumer<JsonNode> rawListener = ignored -> rawInvocations.incrementAndGet();
+            java.util.function.Consumer<TestEvent> typedListener = ignored -> typedInvocations.incrementAndGet();
 
-        client.on("TEST_EVENT", rawListener);
-        client.on("TEST_EVENT", TestEvent.class, typedListener);
-        assertTrue(client.off("TEST_EVENT", rawListener));
-        assertTrue(client.off("TEST_EVENT", TestEvent.class, typedListener));
+            client.on("TEST_EVENT", rawListener);
+            client.on("TEST_EVENT", TestEvent.class, typedListener);
+            assertTrue(client.off("TEST_EVENT", rawListener));
+            assertTrue(client.off("TEST_EVENT", TestEvent.class, typedListener));
 
-        client.onText(new StubWebSocket(), """
-                {"op":0,"t":"TEST_EVENT","d":{"id":"1","name":"n"}}
-                """, true);
+            client.onText(new StubWebSocket(), """
+                    {"op":0,"t":"TEST_EVENT","d":{"id":"1","name":"n"}}
+                    """, true);
 
-        assertEquals(0, rawInvocations.get());
-        assertEquals(0, typedInvocations.get());
+            assertEquals(0, rawInvocations.get());
+            assertEquals(0, typedInvocations.get());
+        } finally {
+            client.close();
+        }
     }
 
     @Test
     void mapsReadyAndMessageCreateEventsToBuiltInTypedModels() {
         DiscordGatewayClient client = gatewayClient(new ObjectMapper());
-        AtomicReference<ReadyEvent> readyEventRef = new AtomicReference<>();
-        AtomicReference<MessageCreateEvent> messageEventRef = new AtomicReference<>();
+        try {
+            AtomicReference<ReadyEvent> readyEventRef = new AtomicReference<>();
+            AtomicReference<MessageCreateEvent> messageEventRef = new AtomicReference<>();
 
-        client.on("READY", ReadyEvent.class, readyEventRef::set);
-        client.on("MESSAGE_CREATE", MessageCreateEvent.class, messageEventRef::set);
+            client.on("READY", ReadyEvent.class, readyEventRef::set);
+            client.on("MESSAGE_CREATE", MessageCreateEvent.class, messageEventRef::set);
 
-        client.onText(new StubWebSocket(), """
-                {"op":0,"t":"READY","d":{"session_id":"abc","resume_gateway_url":"wss://gateway.discord.gg"}}
-                """, true);
-        client.onText(new StubWebSocket(), """
-                {"op":0,"t":"MESSAGE_CREATE","d":{"id":"m1","channel_id":"c1","guild_id":"g1","content":"Hello","author":{"id":"u1","username":"neo","discriminator":"0001"}}}
-                """, true);
+            client.onText(new StubWebSocket(), """
+                    {"op":0,"t":"READY","d":{"session_id":"abc","resume_gateway_url":"wss://gateway.discord.gg"}}
+                    """, true);
+            client.onText(new StubWebSocket(), """
+                    {"op":0,"t":"MESSAGE_CREATE","d":{"id":"m1","channel_id":"c1","guild_id":"g1","content":"Hello","author":{"id":"u1","username":"neo","discriminator":"0001"}}}
+                    """, true);
 
-        assertEquals("abc", readyEventRef.get().sessionId());
-        assertEquals("wss://gateway.discord.gg", readyEventRef.get().resumeGatewayUrl());
-        assertEquals("m1", messageEventRef.get().id());
-        assertEquals("neo", messageEventRef.get().author().username());
+            assertEquals("abc", readyEventRef.get().sessionId());
+            assertEquals("wss://gateway.discord.gg", readyEventRef.get().resumeGatewayUrl());
+            assertEquals("m1", messageEventRef.get().id());
+            assertEquals("neo", messageEventRef.get().author().username());
+        } finally {
+            client.close();
+        }
     }
 
     @Test
@@ -138,17 +162,62 @@ class DiscordGatewayClientTest {
                 config,
                 new DiscordRestClient(HttpClient.newHttpClient(), mapper, config)
         );
+        try {
+            CapturingWebSocket socket = new CapturingWebSocket();
+            client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
 
-        CapturingWebSocket socket = new CapturingWebSocket();
-        client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
+            JsonNode sentPayload = mapper.readTree(socket.lastSentText.get());
+            assertEquals(2, sentPayload.path("op").asInt());
+            assertEquals(1, sentPayload.path("d").path("shard").get(0).asInt());
+            assertEquals(4, sentPayload.path("d").path("shard").get(1).asInt());
+        } finally {
+            client.close();
+        }
+    }
 
-        JsonNode sentPayload = mapper.readTree(socket.lastSentText.get());
-        assertEquals(2, sentPayload.path("op").asInt());
-        assertEquals(1, sentPayload.path("d").path("shard").get(0).asInt());
-        assertEquals(4, sentPayload.path("d").path("shard").get(1).asInt());
+    @Test
+    void defaultConfigurationDispatchesListenersOnVirtualThreads() throws InterruptedException {
+        DiscordGatewayClient client = gatewayClientWithVirtualThreadDispatch(new ObjectMapper());
+        try {
+            CountDownLatch latch = new CountDownLatch(1);
+            AtomicReference<Boolean> ranOnVirtualThread = new AtomicReference<>(false);
+
+            client.on("TEST_EVENT", ignored -> {
+                ranOnVirtualThread.set(Thread.currentThread().isVirtual());
+                latch.countDown();
+            });
+
+            client.onText(new StubWebSocket(), """
+                    {"op":0,"t":"TEST_EVENT","d":{"id":"42","name":"typed"}}
+                    """, true);
+
+            assertTrue(latch.await(2, TimeUnit.SECONDS), "listener should run asynchronously");
+            assertEquals(Boolean.TRUE, ranOnVirtualThread.get());
+        } finally {
+            client.close();
+        }
     }
 
     private static DiscordGatewayClient gatewayClient(ObjectMapper mapper) {
+        HttpClient httpClient = HttpClient.newHttpClient();
+        DiscordClientConfig config = DiscordClientConfig.builder("token")
+                .intents(0)
+                .apiBaseUrl("https://discord.com/api")
+                .apiVersion(10)
+                .requestTimeout(Duration.ofSeconds(5))
+                .build();
+        DiscordRestClient restClient = new DiscordRestClient(httpClient, mapper, config);
+        return new DiscordGatewayClient(
+                httpClient,
+                mapper,
+                config,
+                restClient,
+                new DirectExecutorService(),
+                Executors.newSingleThreadScheduledExecutor()
+        );
+    }
+
+    private static DiscordGatewayClient gatewayClientWithVirtualThreadDispatch(ObjectMapper mapper) {
         HttpClient httpClient = HttpClient.newHttpClient();
         DiscordClientConfig config = DiscordClientConfig.builder("token")
                 .intents(0)
@@ -232,6 +301,41 @@ class DiscordGatewayClientTest {
         public CompletableFuture<WebSocket> sendText(CharSequence data, boolean last) {
             lastSentText.set(data.toString());
             return CompletableFuture.completedFuture(this);
+        }
+    }
+
+    private static final class DirectExecutorService extends AbstractExecutorService {
+        private volatile boolean shutdown;
+
+        @Override
+        public void shutdown() {
+            shutdown = true;
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown = true;
+            return Collections.emptyList();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return shutdown;
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return shutdown;
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            return shutdown;
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            command.run();
         }
     }
 }
