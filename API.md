@@ -33,7 +33,9 @@
 - Prefer `on*Context(...)` handlers and respond through `InteractionContext`.
 - `InteractionContext` helpers include:
   - Response helpers: `respondWithMessage`, `respondWithEmbeds`, `respondEphemeral`, `respondWithModal`, `respondWithAutocompleteChoices`, `deferMessage`, `deferUpdate`
-  - Option helpers: `optionString`, `requiredOptionString`, `optionLong`, `optionInt`, `optionBoolean`
+  - Option helpers: `optionString`, `requiredOptionString`, `optionLong`, `optionInt`, `optionBoolean`, `optionDouble`
+  - Resolved entity helpers: `resolvedAttachment`, `resolvedUser`, `resolvedMember`, `resolvedRole`, `resolvedChannel`
+  - Option-to-resolved helpers: `optionResolvedAttachment`, `optionResolvedUser`, `optionResolvedRole`, `optionResolvedChannel`
   - Modal helper: `modalValue`
   - Metadata helpers: `id`, `token`, `interactionType`, `commandType`, `guildId`, `channelId`, `userId`
 

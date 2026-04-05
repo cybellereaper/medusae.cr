@@ -47,6 +47,12 @@ client.onSlashCommandContext("echo", context -> {
     String text = context.optionString("text");
     context.respondEphemeral("You said: " + text);
 });
+
+client.onSlashCommandContext("profile-photo", context -> {
+    // Attachment options can be resolved directly from interaction payload metadata.
+    var attachment = context.optionResolvedAttachment("photo");
+    context.respondEphemeral(attachment == null ? "No photo provided" : "Photo received.");
+});
 ```
 
 ## Sharding

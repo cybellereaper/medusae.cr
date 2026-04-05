@@ -14,6 +14,7 @@ public final class InteractionContext {
     private static final String VALUE_FIELD = "value";
     private static final String CUSTOM_ID_FIELD = "custom_id";
     private static final String TYPE_FIELD = "type";
+    private static final String RESOLVED_FIELD = "resolved";
     private static final int MAX_AUTOCOMPLETE_CHOICES = 25;
 
     private final JsonNode interaction;
@@ -131,6 +132,61 @@ public final class InteractionContext {
         return null;
     }
 
+    public Double optionDouble(String optionName) {
+        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
+        if (option == null) {
+            return null;
+        }
+        JsonNode value = option.path(VALUE_FIELD);
+        if (value.isNumber()) {
+            return value.doubleValue();
+        }
+        if (value.isTextual()) {
+            try {
+                return Double.parseDouble(value.asText().trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    public JsonNode resolvedAttachment(String attachmentId) {
+        return resolvedEntity("attachments", attachmentId);
+    }
+
+    public JsonNode resolvedUser(String userId) {
+        return resolvedEntity("users", userId);
+    }
+
+    public JsonNode resolvedMember(String userId) {
+        return resolvedEntity("members", userId);
+    }
+
+    public JsonNode resolvedRole(String roleId) {
+        return resolvedEntity("roles", roleId);
+    }
+
+    public JsonNode resolvedChannel(String channelId) {
+        return resolvedEntity("channels", channelId);
+    }
+
+    public JsonNode optionResolvedAttachment(String optionName) {
+        return resolvedAttachment(optionResolvedId(optionName));
+    }
+
+    public JsonNode optionResolvedUser(String optionName) {
+        return resolvedUser(optionResolvedId(optionName));
+    }
+
+    public JsonNode optionResolvedRole(String optionName) {
+        return resolvedRole(optionResolvedId(optionName));
+    }
+
+    public JsonNode optionResolvedChannel(String optionName) {
+        return resolvedChannel(optionResolvedId(optionName));
+    }
+
     public String modalValue(String customId) {
         Objects.requireNonNull(customId, "customId");
 
@@ -218,6 +274,30 @@ public final class InteractionContext {
             }
         }
         return null;
+    }
+
+    private String optionResolvedId(String optionName) {
+        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
+        if (option == null) {
+            return null;
+        }
+        JsonNode value = option.path(VALUE_FIELD);
+        if (value.isTextual()) {
+            String text = value.asText().trim();
+            return text.isEmpty() ? null : text;
+        }
+        if (value.isIntegralNumber()) {
+            return Long.toString(value.longValue());
+        }
+        return null;
+    }
+
+    private JsonNode resolvedEntity(String entityType, String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        JsonNode entity = interaction.path(DATA_FIELD).path(RESOLVED_FIELD).path(entityType).path(id);
+        return entity.isMissingNode() || entity.isNull() ? null : entity;
     }
 
     private static String textOrNull(JsonNode node) {

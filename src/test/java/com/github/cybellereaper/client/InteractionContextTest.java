@@ -131,7 +131,9 @@ class InteractionContextTest {
         assertEquals(42L, context.optionLong("count"));
         assertEquals(42, context.optionInt("count"));
         assertEquals(77L, context.optionLong("text_num"));
+        assertEquals(77.0, context.optionDouble("text_num"));
         assertNull(context.optionLong("invalid_num"));
+        assertNull(context.optionDouble("invalid_num"));
         assertEquals(true, context.optionBoolean("enabled"));
         assertEquals(false, context.optionBoolean("text_bool"));
         assertNull(context.optionBoolean("missing"));
@@ -139,5 +141,49 @@ class InteractionContextTest {
         assertEquals("chan-9", context.channelId());
         assertEquals("user-3", context.userId());
         assertEquals(1, context.commandType());
+    }
+
+    @Test
+    void resolvesEntitiesFromResolvedInteractionData() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "id": "88",
+                  "token": "tok",
+                  "type": 2,
+                  "data": {
+                    "name": "profile",
+                    "options": [
+                      { "name": "photo", "value": "att-1" },
+                      { "name": "target_user", "value": "user-1" },
+                      { "name": "target_role", "value": "role-1" },
+                      { "name": "target_channel", "value": "chan-1" }
+                    ],
+                    "resolved": {
+                      "attachments": {
+                        "att-1": { "id": "att-1", "filename": "avatar.png" }
+                      },
+                      "users": {
+                        "user-1": { "id": "user-1", "username": "neo" }
+                      },
+                      "roles": {
+                        "role-1": { "id": "role-1", "name": "admin" }
+                      },
+                      "channels": {
+                        "chan-1": { "id": "chan-1", "name": "general" }
+                      }
+                    }
+                  }
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+        });
+
+        assertEquals("avatar.png", context.optionResolvedAttachment("photo").path("filename").asText());
+        assertEquals("neo", context.optionResolvedUser("target_user").path("username").asText());
+        assertEquals("admin", context.optionResolvedRole("target_role").path("name").asText());
+        assertEquals("general", context.optionResolvedChannel("target_channel").path("name").asText());
+        assertNull(context.optionResolvedAttachment("missing"));
+        assertNull(context.resolvedMember("user-1"));
     }
 }
