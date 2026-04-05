@@ -3,7 +3,10 @@ package com.github.cybellereaper.gateway;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.client.DiscordClientConfig;
+import com.github.cybellereaper.gateway.events.GuildCreateEvent;
+import com.github.cybellereaper.gateway.events.InteractionCreateEvent;
 import com.github.cybellereaper.gateway.events.MessageCreateEvent;
+import com.github.cybellereaper.gateway.events.MessageDeleteEvent;
 import com.github.cybellereaper.gateway.events.ReadyEvent;
 import com.github.cybellereaper.http.DiscordRestClient;
 import org.junit.jupiter.api.Test;
@@ -104,13 +107,19 @@ class DiscordGatewayClientTest {
     }
 
     @Test
-    void mapsReadyAndMessageCreateEventsToBuiltInTypedModels() {
+    void mapsBuiltInTypedGatewayEvents() {
         DiscordGatewayClient client = gatewayClient(new ObjectMapper());
         AtomicReference<ReadyEvent> readyEventRef = new AtomicReference<>();
-        AtomicReference<MessageCreateEvent> messageEventRef = new AtomicReference<>();
+        AtomicReference<MessageCreateEvent> messageCreateEventRef = new AtomicReference<>();
+        AtomicReference<MessageDeleteEvent> messageDeleteEventRef = new AtomicReference<>();
+        AtomicReference<GuildCreateEvent> guildCreateEventRef = new AtomicReference<>();
+        AtomicReference<InteractionCreateEvent> interactionCreateEventRef = new AtomicReference<>();
 
         client.on("READY", ReadyEvent.class, readyEventRef::set);
-        client.on("MESSAGE_CREATE", MessageCreateEvent.class, messageEventRef::set);
+        client.on("MESSAGE_CREATE", MessageCreateEvent.class, messageCreateEventRef::set);
+        client.on("MESSAGE_DELETE", MessageDeleteEvent.class, messageDeleteEventRef::set);
+        client.on("GUILD_CREATE", GuildCreateEvent.class, guildCreateEventRef::set);
+        client.on("INTERACTION_CREATE", InteractionCreateEvent.class, interactionCreateEventRef::set);
 
         client.onText(new StubWebSocket(), """
                 {"op":0,"t":"READY","d":{"session_id":"abc","resume_gateway_url":"wss://gateway.discord.gg"}}
@@ -118,11 +127,32 @@ class DiscordGatewayClientTest {
         client.onText(new StubWebSocket(), """
                 {"op":0,"t":"MESSAGE_CREATE","d":{"id":"m1","channel_id":"c1","guild_id":"g1","content":"Hello","author":{"id":"u1","username":"neo","discriminator":"0001"}}}
                 """, true);
+        client.onText(new StubWebSocket(), """
+                {"op":0,"t":"MESSAGE_DELETE","d":{"id":"m1","channel_id":"c1","guild_id":"g1"}}
+                """, true);
+        client.onText(new StubWebSocket(), """
+                {"op":0,"t":"GUILD_CREATE","d":{"id":"g1","name":"Jellycord","member_count":42,"unavailable":false}}
+                """, true);
+        client.onText(new StubWebSocket(), """
+                {"op":0,"t":"INTERACTION_CREATE","d":{"id":"i1","type":2,"token":"token-1","guild_id":"g1","channel_id":"c1","data":{"id":"cmd1","name":"ping"},"member":{"nick":"cybelle","user":{"id":"u1","username":"neo","discriminator":"0001"}}}}
+                """, true);
 
         assertEquals("abc", readyEventRef.get().sessionId());
         assertEquals("wss://gateway.discord.gg", readyEventRef.get().resumeGatewayUrl());
-        assertEquals("m1", messageEventRef.get().id());
-        assertEquals("neo", messageEventRef.get().author().username());
+
+        assertEquals("m1", messageCreateEventRef.get().id());
+        assertEquals("neo", messageCreateEventRef.get().author().username());
+
+        assertEquals("m1", messageDeleteEventRef.get().id());
+        assertEquals("c1", messageDeleteEventRef.get().channelId());
+
+        assertEquals("g1", guildCreateEventRef.get().id());
+        assertEquals(42, guildCreateEventRef.get().memberCount());
+        assertFalse(guildCreateEventRef.get().unavailable());
+
+        assertEquals("i1", interactionCreateEventRef.get().id());
+        assertEquals("ping", interactionCreateEventRef.get().data().name());
+        assertEquals("neo", interactionCreateEventRef.get().member().user().username());
     }
 
     @Test

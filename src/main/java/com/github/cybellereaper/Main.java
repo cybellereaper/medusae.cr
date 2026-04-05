@@ -11,6 +11,11 @@ import com.github.cybellereaper.client.DiscordStringSelectMenu;
 import com.github.cybellereaper.client.SlashCommandDefinition;
 import com.github.cybellereaper.client.SlashCommandOptionDefinition;
 import com.github.cybellereaper.gateway.GatewayIntent;
+import com.github.cybellereaper.gateway.events.GuildCreateEvent;
+import com.github.cybellereaper.gateway.events.InteractionCreateEvent;
+import com.github.cybellereaper.gateway.events.MessageCreateEvent;
+import com.github.cybellereaper.gateway.events.MessageDeleteEvent;
+import com.github.cybellereaper.gateway.events.ReadyEvent;
 
 import java.util.List;
 
@@ -48,11 +53,26 @@ void main() throws Exception {
             client.registerGuildSlashCommands(guildId, commands);
         }
 
-        client.on("MESSAGE_CREATE", message -> {
-            String content = message.path("content").asText("");
-            String channelId = message.path("channel_id").asText();
+        client.on("READY", ReadyEvent.class, ready ->
+                System.out.println("Gateway ready, session " + ready.sessionId()));
 
-            if ("!ping".equals(content)) {
+        client.on("GUILD_CREATE", GuildCreateEvent.class, guild ->
+                System.out.println("Connected to guild " + guild.name() + " (" + guild.id() + ")"));
+
+        client.on("INTERACTION_CREATE", InteractionCreateEvent.class, interaction -> {
+            if (interaction.data() != null) {
+                System.out.println("Incoming interaction: " + interaction.data().name());
+            }
+        });
+
+        client.on("MESSAGE_DELETE", MessageDeleteEvent.class, event ->
+                System.out.println("Deleted message " + event.id()));
+
+        client.on("MESSAGE_CREATE", MessageCreateEvent.class, message -> {
+            String content = message.content() == null ? "" : message.content();
+            String channelId = message.channelId();
+
+            if ("!ping".equals(content) && channelId != null) {
                 DiscordActionRow buttons = DiscordActionRow.of(List.of(
                         DiscordButton.primary("confirm_button", "Confirm").withEmoji("✅"),
                         DiscordButton.link("https://discord.com/developers/docs/interactions", "Docs")

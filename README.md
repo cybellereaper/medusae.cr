@@ -60,6 +60,42 @@ String scopes = DiscordOAuthScopes.join(
 ```
 
 
+## Typed Gateway Events
+
+Jellycord supports both raw `JsonNode` listeners and typed models for common events:
+
+```java
+import com.github.cybellereaper.gateway.events.GuildCreateEvent;
+import com.github.cybellereaper.gateway.events.InteractionCreateEvent;
+import com.github.cybellereaper.gateway.events.MessageCreateEvent;
+import com.github.cybellereaper.gateway.events.MessageDeleteEvent;
+import com.github.cybellereaper.gateway.events.ReadyEvent;
+
+client.on("READY", ReadyEvent.class, ready ->
+        System.out.println("Session: " + ready.sessionId()));
+
+client.on("MESSAGE_CREATE", MessageCreateEvent.class, event ->
+        System.out.println(event.author().username() + ": " + event.content()));
+
+client.on("MESSAGE_DELETE", MessageDeleteEvent.class, event ->
+        System.out.println("Deleted message " + event.id() + " in channel " + event.channelId()));
+
+client.on("GUILD_CREATE", GuildCreateEvent.class, event ->
+        System.out.println("Connected to guild " + event.name() + " with " + event.memberCount() + " members"));
+
+client.on("INTERACTION_CREATE", InteractionCreateEvent.class, event -> {
+    if (event.data() != null) {
+        System.out.println("Interaction: " + event.data().name());
+    }
+});
+```
+
+For uncommon payloads, keep using raw listeners:
+
+```java
+client.on("THREAD_CREATE", payload -> System.out.println(payload));
+```
+
 ## Modal Support
 
 You can open a modal from any interaction and read submitted values on modal submit events:

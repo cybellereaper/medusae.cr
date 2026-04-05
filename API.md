@@ -19,7 +19,30 @@
 
 - `on(String eventType, Consumer<JsonNode> listener)`
 - `on(String eventType, Class<T> eventClass, Consumer<T> listener)`
+- `on(String eventType, Class<T> eventClass, EventDeserializer<T> deserializer, Consumer<T> listener)`
 - `off(...)`
+
+#### Built-in typed event models
+
+Use these directly with `on(eventType, eventClass, listener)`:
+
+- `ReadyEvent` (`READY`)
+- `MessageCreateEvent` (`MESSAGE_CREATE`)
+- `MessageDeleteEvent` (`MESSAGE_DELETE`)
+- `GuildCreateEvent` (`GUILD_CREATE`)
+- `InteractionCreateEvent` (`INTERACTION_CREATE`)
+
+Example:
+
+```java
+client.on("MESSAGE_CREATE", MessageCreateEvent.class, event -> {
+    String author = event.author() == null ? "unknown" : event.author().username();
+    System.out.println(author + ": " + event.content());
+});
+
+client.on("MESSAGE_DELETE", MessageDeleteEvent.class,
+        event -> System.out.println("deleted " + event.id()));
+```
 
 ### Command registration
 
