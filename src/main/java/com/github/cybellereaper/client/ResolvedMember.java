@@ -6,7 +6,7 @@ public record ResolvedMember(
         String userId,
         String nickname
 ) {
-    static ResolvedMember from(String userId, JsonNode node) {
+    public static ResolvedMember from(String userId, JsonNode node) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return null;
         }

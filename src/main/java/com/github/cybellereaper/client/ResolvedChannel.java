@@ -7,7 +7,7 @@ public record ResolvedChannel(
         String name,
         int type
 ) {
-    static ResolvedChannel from(JsonNode node) {
+    public static ResolvedChannel from(JsonNode node) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return null;
         }

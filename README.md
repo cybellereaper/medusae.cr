@@ -154,3 +154,26 @@ client.sendMessageWithAttachments(
 ```bash
 ./gradlew test
 ```
+
+## Annotation Command Framework (Experimental)
+
+This repository now includes an annotation-first Discord command framework under `com.github.cybellereaper.commands`.
+
+```java
+CommandFramework framework = new CommandFramework();
+framework.registerCheck("guildonly", ctx -> !ctx.interaction().dm());
+framework.registerAutocomplete("membersearch", (ctx, value) -> List.of("a", "b"));
+framework.registerCommands(new UserCommands());
+
+DiscordCommandSyncService sync = new DiscordCommandSyncService(framework);
+sync.syncGlobal(discordClient);
+```
+
+### Supported features
+- Slash commands, subcommands, and subcommand groups
+- User context menu and message context menu commands
+- Typed option binding with custom resolvers
+- Declarative checks, permissions, cooldowns, and autocomplete
+- Command schema export + Discord registration sync service
+
+See `docs-command-framework.md` and `src/main/java/com/github/cybellereaper/examples/commands` for a complete example.

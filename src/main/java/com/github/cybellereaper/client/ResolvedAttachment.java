@@ -10,7 +10,7 @@ public record ResolvedAttachment(
         String url,
         String proxyUrl
 ) {
-    static ResolvedAttachment from(JsonNode node) {
+    public static ResolvedAttachment from(JsonNode node) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return null;
         }

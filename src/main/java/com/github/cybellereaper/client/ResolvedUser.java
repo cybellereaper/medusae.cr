@@ -8,7 +8,7 @@ public record ResolvedUser(
         String globalName,
         boolean bot
 ) {
-    static ResolvedUser from(JsonNode node) {
+    public static ResolvedUser from(JsonNode node) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return null;
         }
