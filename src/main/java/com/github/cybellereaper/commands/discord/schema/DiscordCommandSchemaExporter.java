@@ -9,6 +9,7 @@ import com.github.cybellereaper.commands.core.model.CommandType;
 import com.github.cybellereaper.commands.core.model.ParameterKind;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -48,13 +49,15 @@ public final class DiscordCommandSchemaExporter {
         }
 
         definition.handlers().stream().filter(h -> h.subcommand() == null).findFirst()
-                .ifPresent(root -> root.parameters().stream().filter(this::isSchemaOption).map(this::toOption).forEach(options::add));
+                .ifPresent(root -> orderedSchemaParameters(root.parameters()).stream().map(this::toOption).forEach(options::add));
 
         return new SlashCommandDefinition(definition.name(), definition.description(), options);
     }
 
     private SlashCommandOptionDefinition toSubcommand(CommandHandler handler) {
-        List<SlashCommandOptionDefinition> options = handler.parameters().stream().filter(this::isSchemaOption).map(this::toOption).toList();
+        List<SlashCommandOptionDefinition> options = orderedSchemaParameters(handler.parameters()).stream()
+                .map(this::toOption)
+                .toList();
         return SlashCommandOptionDefinition.subcommand(handler.subcommand(), handler.description(), options);
     }
 
@@ -67,6 +70,13 @@ public final class DiscordCommandSchemaExporter {
 
     private SlashCommandOptionDefinition toOption(CommandParameter parameter) {
         return new SlashCommandOptionDefinition(mapOptionType(parameter), parameter.optionName(), parameter.description(), parameter.required(), parameter.autocompleteId() != null);
+    }
+
+    private List<CommandParameter> orderedSchemaParameters(List<CommandParameter> parameters) {
+        return parameters.stream()
+                .filter(this::isSchemaOption)
+                .sorted(Comparator.comparing(CommandParameter::required).reversed().thenComparing(CommandParameter::index))
+                .toList();
     }
 
     private int mapOptionType(CommandParameter parameter) {

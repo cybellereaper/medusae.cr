@@ -4,6 +4,7 @@ import com.github.cybellereaper.commands.core.annotation.*;
 import com.github.cybellereaper.commands.core.exception.RegistrationException;
 import com.github.cybellereaper.commands.core.model.CommandDefinition;
 import com.github.cybellereaper.commands.core.model.CommandType;
+import com.github.cybellereaper.commands.core.model.CommandParameter;
 import com.github.cybellereaper.commands.core.parser.CommandParser;
 import org.junit.jupiter.api.Test;
 
@@ -27,6 +28,14 @@ class CommandParserTest {
         assertThrows(RegistrationException.class, () -> parser.parse(new DuplicateRoutes()));
     }
 
+    @Test
+    void preservesDeclaredParameterNamesWithoutNameAnnotation() {
+        CommandDefinition definition = parser.parse(new NamedByCompilerCommand());
+
+        CommandParameter reason = definition.handlers().getFirst().parameters().get(1);
+        assertEquals("reason", reason.optionName());
+    }
+
     @Command("admin")
     @Description("admin commands")
     static final class AdminCommands {
@@ -47,5 +56,12 @@ class CommandParserTest {
 
         @Subcommand("ping")
         void b() {}
+    }
+
+    @Command("named")
+    static final class NamedByCompilerCommand {
+        @Execute
+        void root(String target, @Optional String reason) {
+        }
     }
 }
