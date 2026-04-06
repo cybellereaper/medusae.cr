@@ -52,6 +52,38 @@
 
 - `api()` returns a `DiscordApi` instance for common direct REST operations.
 
+
+## Interaction Routing Examples
+
+### Slash command routing with `InteractionContext`
+
+```java
+client.onSlashCommandContext("echo", context -> {
+    String text = context.requiredOptionString("text");
+    context.respondEphemeral("Echo: " + text);
+});
+```
+
+### Context menu routing
+
+```java
+client.onUserContextMenuContext("Inspect User", context ->
+        context.respondEphemeral("Triggered by user " + context.userId())
+);
+
+client.onMessageContextMenuContext("Quote Message", context ->
+        context.respondWithMessage("Quoted from context menu")
+);
+```
+
+### Component/modal/autocomplete handling
+
+```java
+client.onComponentInteractionContext("open_modal", context -> context.respondWithModal(modal));
+client.onModalSubmitContext("feedback_modal", context -> context.respondEphemeral(context.modalValue("feedback")));
+client.onAutocompleteContext("search", context -> context.respondWithAutocompleteChoices(List.of()));
+```
+
 ## `DiscordApi`
 
 `DiscordApi` provides convenience methods on top of the underlying REST client.

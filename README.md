@@ -55,6 +55,69 @@ client.onSlashCommandContext("profile-photo", context -> {
 });
 ```
 
+
+## Interaction Examples
+
+### Slash command + typed option access
+
+```java
+client.onSlashCommandContext("admin-ban", context -> {
+    String userId = context.requiredOptionString("user_id");
+    String reason = context.optionString("reason");
+    context.respondEphemeral("Queued ban for " + userId + (reason == null ? "" : " (" + reason + ")"));
+});
+```
+
+### User and message context menus
+
+```java
+client.onUserContextMenuContext("Inspect User", context -> {
+    String targetUserId = context.optionString("user");
+    context.respondEphemeral("Inspecting user: " + targetUserId);
+});
+
+client.onMessageContextMenuContext("Quote Message", context ->
+        context.respondWithMessage("Quoted via context menu")
+);
+```
+
+### Autocomplete routing
+
+```java
+client.onAutocompleteContext("language", context -> {
+    String prefix = context.optionString("query");
+    List<AutocompleteChoice> choices = List.of(
+            new AutocompleteChoice("Java", "java"),
+            new AutocompleteChoice("JavaScript", "javascript")
+    ).stream()
+            .filter(choice -> prefix == null || choice.name().toLowerCase().startsWith(prefix.toLowerCase()))
+            .toList();
+
+    context.respondWithAutocompleteChoices(choices);
+});
+```
+
+### Component + modal flow
+
+```java
+client.onComponentInteractionContext("open_feedback", context -> {
+    DiscordModal modal = DiscordModal.of(
+            "feedback_modal",
+            "Feedback",
+            List.of(DiscordActionRow.of(List.of(
+                    DiscordTextInput.paragraph("feedback_text", "What can we improve?")
+            )))
+    );
+
+    context.respondWithModal(modal);
+});
+
+client.onModalSubmitContext("feedback_modal", context -> {
+    String feedback = context.modalValue("feedback_text");
+    context.respondEphemeral("Thanks! Received: " + feedback);
+});
+```
+
 ## Sharding
 
 Configure shard routing when running multiple gateway workers:

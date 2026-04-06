@@ -271,6 +271,46 @@ class SlashCommandRouterTest {
         assertEquals(1, invocationCount.get());
     }
 
+
+    @Test
+    void allowsSameKeyAcrossDifferentHandlerGroups() {
+        AtomicInteger slashCount = new AtomicInteger(0);
+        AtomicInteger componentCount = new AtomicInteger(0);
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+
+        router.registerSlashHandler("shared", ignored -> slashCount.incrementAndGet());
+        router.registerComponentHandler("shared", ignored -> componentCount.incrementAndGet());
+
+        assertEquals(0, slashCount.get());
+        assertEquals(0, componentCount.get());
+    }
+
+    @Test
+    void trimsComponentCustomIdDuringDispatch() throws Exception {
+        AtomicInteger invocationCount = new AtomicInteger(0);
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+
+        router.registerComponentHandler("confirm_button", ignored -> invocationCount.incrementAndGet());
+
+        router.handleInteraction(interactionPayload(3, null, "  confirm_button  ", "1", "token", null, null));
+
+        assertEquals(1, invocationCount.get());
+    }
+
+
+    @Test
+    void rejectsNullContextHandlerRegistration() {
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+        });
+
+        assertThrows(NullPointerException.class, () -> router.registerSlashContextHandler("ping", null));
+        assertThrows(NullPointerException.class, () -> router.registerComponentContextHandler("button", null));
+        assertThrows(NullPointerException.class, () -> router.registerModalContextHandler("modal", null));
+    }
+
     @Test
     void respondWithMessageRequiresIdAndToken() throws Exception {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {

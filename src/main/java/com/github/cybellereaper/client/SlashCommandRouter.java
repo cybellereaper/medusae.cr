@@ -3,6 +3,7 @@ package com.github.cybellereaper.client;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.Arrays;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -16,16 +17,12 @@ final class SlashCommandRouter {
     private static final String ID_FIELD = "id";
     private static final String TOKEN_FIELD = "token";
 
-    private final Map<String, Consumer<InteractionContext>> slashHandlers = new ConcurrentHashMap<>();
-    private final Map<String, Consumer<InteractionContext>> userContextMenuHandlers = new ConcurrentHashMap<>();
-    private final Map<String, Consumer<InteractionContext>> messageContextMenuHandlers = new ConcurrentHashMap<>();
-    private final Map<String, Consumer<InteractionContext>> componentHandlers = new ConcurrentHashMap<>();
-    private final Map<String, Consumer<InteractionContext>> modalHandlers = new ConcurrentHashMap<>();
-    private final Map<String, Consumer<InteractionContext>> autocompleteHandlers = new ConcurrentHashMap<>();
+    private final Map<HandlerGroup, Map<String, Consumer<InteractionContext>>> handlerRegistry;
     private final InteractionResponder responder;
 
     SlashCommandRouter(InteractionResponder responder) {
         this.responder = Objects.requireNonNull(responder, "responder");
+        this.handlerRegistry = initializeHandlerRegistry();
     }
 
     void registerSlashHandler(String commandName, Consumer<JsonNode> handler) {
@@ -59,27 +56,27 @@ final class SlashCommandRouter {
     }
 
     void registerSlashContextHandler(String commandName, InteractionHandler handler) {
-        registerUniqueHandler(slashHandlers, commandName, "slash command", handler::handle);
+        registerUniqueHandler(HandlerGroup.SLASH_COMMAND, commandName, handler);
     }
 
     void registerComponentContextHandler(String customId, InteractionHandler handler) {
-        registerUniqueHandler(componentHandlers, customId, "component", handler::handle);
+        registerUniqueHandler(HandlerGroup.COMPONENT, customId, handler);
     }
 
     void registerModalContextHandler(String customId, InteractionHandler handler) {
-        registerUniqueHandler(modalHandlers, customId, "modal", handler::handle);
+        registerUniqueHandler(HandlerGroup.MODAL, customId, handler);
     }
 
     void registerAutocompleteContextHandler(String commandName, InteractionHandler handler) {
-        registerUniqueHandler(autocompleteHandlers, commandName, "autocomplete", handler::handle);
+        registerUniqueHandler(HandlerGroup.AUTOCOMPLETE, commandName, handler);
     }
 
     void registerUserContextMenuContextHandler(String commandName, InteractionHandler handler) {
-        registerUniqueHandler(userContextMenuHandlers, commandName, "user context menu", handler::handle);
+        registerUniqueHandler(HandlerGroup.USER_CONTEXT_MENU, commandName, handler);
     }
 
     void registerMessageContextMenuContextHandler(String commandName, InteractionHandler handler) {
-        registerUniqueHandler(messageContextMenuHandlers, commandName, "message context menu", handler::handle);
+        registerUniqueHandler(HandlerGroup.MESSAGE_CONTEXT_MENU, commandName, handler);
     }
 
     void handleInteraction(JsonNode interaction) {
@@ -91,9 +88,9 @@ final class SlashCommandRouter {
         switch (interactionType) {
             case PING -> respond(interaction, ResponseType.PONG, null);
             case APPLICATION_COMMAND -> handleApplicationCommand(interaction);
-            case APPLICATION_COMMAND_AUTOCOMPLETE -> dispatchByDataField(interaction, autocompleteHandlers, DataField.NAME);
-            case MESSAGE_COMPONENT -> dispatchByDataField(interaction, componentHandlers, DataField.CUSTOM_ID);
-            case MODAL_SUBMIT -> dispatchByDataField(interaction, modalHandlers, DataField.CUSTOM_ID);
+            case APPLICATION_COMMAND_AUTOCOMPLETE -> dispatchByDataField(interaction, HandlerGroup.AUTOCOMPLETE);
+            case MESSAGE_COMPONENT -> dispatchByDataField(interaction, HandlerGroup.COMPONENT);
+            case MODAL_SUBMIT -> dispatchByDataField(interaction, HandlerGroup.MODAL);
             case UNKNOWN -> {
                 // Unknown interaction types are intentionally ignored.
             }
@@ -155,21 +152,22 @@ final class SlashCommandRouter {
                 interaction.path(DATA_FIELD).path("type").asInt(CommandType.CHAT_INPUT.code())
         );
 
-        Map<String, Consumer<InteractionContext>> handlers = switch (commandType) {
-            case USER_CONTEXT -> userContextMenuHandlers;
-            case MESSAGE_CONTEXT -> messageContextMenuHandlers;
-            case CHAT_INPUT, UNKNOWN -> slashHandlers;
+        HandlerGroup handlerGroup = switch (commandType) {
+            case USER_CONTEXT -> HandlerGroup.USER_CONTEXT_MENU;
+            case MESSAGE_CONTEXT -> HandlerGroup.MESSAGE_CONTEXT_MENU;
+            case CHAT_INPUT, UNKNOWN -> HandlerGroup.SLASH_COMMAND;
         };
 
-        dispatchByDataField(interaction, handlers, DataField.NAME);
+        dispatchByDataField(interaction, handlerGroup);
     }
 
-    private void dispatchByDataField(JsonNode interaction, Map<String, Consumer<InteractionContext>> handlers, DataField dataField) {
-        String handlerKey = interaction.path(DATA_FIELD).path(dataField.value()).asText("").trim();
-        Consumer<InteractionContext> contextHandler = handlers.get(handlerKey);
-        if (contextHandler != null) {
-            contextHandler.accept(InteractionContext.from(interaction, responder));
+    private void dispatchByDataField(JsonNode interaction, HandlerGroup handlerGroup) {
+        String handlerKey = interaction.path(DATA_FIELD).path(handlerGroup.dataField().value()).asText("").trim();
+        Consumer<InteractionContext> contextHandler = handlers(handlerGroup).get(handlerKey);
+        if (contextHandler == null) {
+            return;
         }
+        contextHandler.accept(InteractionContext.from(interaction, responder));
     }
 
     private void respond(JsonNode interaction, ResponseType responseType, Map<String, Object> data) {
@@ -185,19 +183,19 @@ final class SlashCommandRouter {
         responder.respond(interactionId, interactionToken, responseType.code(), data);
     }
 
-    private static void registerUniqueHandler(
-            Map<String, Consumer<InteractionContext>> handlers,
-            String key,
-            String handlerType,
-            Consumer<InteractionContext> handler
-    ) {
-        String normalizedKey = validateKey(key, handlerType);
+    private void registerUniqueHandler(HandlerGroup handlerGroup, String key, InteractionHandler handler) {
         Objects.requireNonNull(handler, "handler");
 
-        Consumer<InteractionContext> previous = handlers.putIfAbsent(normalizedKey, handler);
+        String normalizedKey = validateKey(key, handlerGroup.description());
+        Consumer<InteractionContext> previous = handlers(handlerGroup).putIfAbsent(normalizedKey, handler::handle);
         if (previous != null) {
-            throw new IllegalArgumentException("Interaction handler already registered for " + handlerType + ": " + normalizedKey);
+            throw new IllegalArgumentException("Interaction handler already registered for "
+                    + handlerGroup.description() + ": " + normalizedKey);
         }
+    }
+
+    private Map<String, Consumer<InteractionContext>> handlers(HandlerGroup group) {
+        return handlerRegistry.get(group);
     }
 
     private static String validateKey(String key, String keyType) {
@@ -207,6 +205,39 @@ final class SlashCommandRouter {
             throw new IllegalArgumentException(keyType + " key must not be blank");
         }
         return normalized;
+    }
+
+    private static Map<HandlerGroup, Map<String, Consumer<InteractionContext>>> initializeHandlerRegistry() {
+        Map<HandlerGroup, Map<String, Consumer<InteractionContext>>> registry = new EnumMap<>(HandlerGroup.class);
+        for (HandlerGroup group : HandlerGroup.values()) {
+            registry.put(group, new ConcurrentHashMap<>());
+        }
+        return Map.copyOf(registry);
+    }
+
+    private enum HandlerGroup {
+        SLASH_COMMAND("slash command", DataField.NAME),
+        USER_CONTEXT_MENU("user context menu", DataField.NAME),
+        MESSAGE_CONTEXT_MENU("message context menu", DataField.NAME),
+        COMPONENT("component", DataField.CUSTOM_ID),
+        MODAL("modal", DataField.CUSTOM_ID),
+        AUTOCOMPLETE("autocomplete", DataField.NAME);
+
+        private final String description;
+        private final DataField dataField;
+
+        HandlerGroup(String description, DataField dataField) {
+            this.description = description;
+            this.dataField = dataField;
+        }
+
+        String description() {
+            return description;
+        }
+
+        DataField dataField() {
+            return dataField;
+        }
     }
 
     private enum InteractionType {
