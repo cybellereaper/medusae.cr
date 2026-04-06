@@ -40,6 +40,28 @@ class SlashCommandRouterTest {
         assertEquals(1, autocompleteCount.get());
     }
 
+
+    @Test
+    void autocompleteHandlerFailureFallsBackToEmptyChoices() throws Exception {
+        AtomicReference<Integer> responseType = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> responseData = new AtomicReference<>();
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+            responseType.set(type);
+            responseData.set(data);
+        });
+
+        router.registerAutocompleteContextHandler("echo", context -> {
+            throw new IllegalStateException("provider offline");
+        });
+
+        router.handleInteraction(interactionPayload(4, "echo", null, "123", "abc", "he", null));
+
+        assertEquals(8, responseType.get());
+        assertNotNull(responseData.get());
+        assertEquals(List.of(), responseData.get().get("choices"));
+    }
+
     @Test
     void routesComponentAndModalInteractionsByCustomId() throws Exception {
         AtomicInteger componentCount = new AtomicInteger(0);

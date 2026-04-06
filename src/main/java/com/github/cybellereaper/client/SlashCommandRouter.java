@@ -16,6 +16,7 @@ final class SlashCommandRouter {
     private static final String DATA_FIELD = "data";
     private static final String ID_FIELD = "id";
     private static final String TOKEN_FIELD = "token";
+    private static final Map<String, Object> EMPTY_AUTOCOMPLETE_CHOICES = Map.of("choices", List.of());
 
     private final Map<HandlerGroup, Map<String, Consumer<InteractionContext>>> handlerRegistry;
     private final InteractionResponder responder;
@@ -88,7 +89,7 @@ final class SlashCommandRouter {
         switch (interactionType) {
             case PING -> respond(interaction, ResponseType.PONG, null);
             case APPLICATION_COMMAND -> handleApplicationCommand(interaction);
-            case APPLICATION_COMMAND_AUTOCOMPLETE -> dispatchByDataField(interaction, HandlerGroup.AUTOCOMPLETE);
+            case APPLICATION_COMMAND_AUTOCOMPLETE -> dispatchAutocompleteInteraction(interaction);
             case MESSAGE_COMPONENT -> dispatchByDataField(interaction, HandlerGroup.COMPONENT);
             case MODAL_SUBMIT -> dispatchByDataField(interaction, HandlerGroup.MODAL);
             case UNKNOWN -> {
@@ -159,6 +160,15 @@ final class SlashCommandRouter {
         };
 
         dispatchByDataField(interaction, handlerGroup);
+    }
+
+
+    private void dispatchAutocompleteInteraction(JsonNode interaction) {
+        try {
+            dispatchByDataField(interaction, HandlerGroup.AUTOCOMPLETE);
+        } catch (RuntimeException ignored) {
+            respond(interaction, ResponseType.AUTOCOMPLETE, EMPTY_AUTOCOMPLETE_CHOICES);
+        }
     }
 
     private void dispatchByDataField(JsonNode interaction, HandlerGroup handlerGroup) {

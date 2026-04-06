@@ -100,6 +100,10 @@ client.onAutocompleteContext("search", context -> context.respondWithAutocomplet
 - IDs and required string arguments must be non-blank.
 - `request(..., path, ...)` requires `path` to start with `/`.
 
+## Command Recipes
+
+See [`docs/COMMAND_RECIPES.md`](docs/COMMAND_RECIPES.md) for permission checks, deferred replies, and handler error-mapping patterns.
+
 ## `DiscordOAuthScopes`
 
 Helpers for OAuth scope composition:

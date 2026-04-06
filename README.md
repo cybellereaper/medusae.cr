@@ -212,6 +212,10 @@ client.sendMessageWithAttachments(
 );
 ```
 
+## Command Recipes
+
+See [`docs/COMMAND_RECIPES.md`](docs/COMMAND_RECIPES.md) for permission checks, deferred replies, and handler error-mapping patterns.
+
 ## Running tests
 
 ```bash
