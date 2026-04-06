@@ -34,6 +34,13 @@ public final class TicketInteractionCommands {
                 .build();
     }
 
+    @ButtonHandler("ticket:faq")
+    public InteractionReply showFaq(ComponentContext ctx) {
+        return InteractionReply.ephemeral()
+                .content("FAQ: include clear details, impacted user IDs, and timestamps.")
+                .build();
+    }
+
     @ModalHandler("ticket:create")
     public InteractionReply submitTicket(
             ModalContext ctx,

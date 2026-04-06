@@ -19,10 +19,11 @@ public final class ExampleCommandBootstrap {
                     .toList();
         });
 
-        framework.registerCommands(
+        framework.registerModules(
                 new UserCommands(),
                 new UserProfileContextCommands(),
-                new MessageContextCommands()
+                new MessageContextCommands(),
+                new TicketInteractionCommands()
         );
 
         return framework;
