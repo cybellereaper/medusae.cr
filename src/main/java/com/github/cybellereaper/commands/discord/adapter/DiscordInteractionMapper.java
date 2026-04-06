@@ -157,15 +157,27 @@ public final class DiscordInteractionMapper {
 
             switch (optionType) {
                 case 6 -> {
-                    optionUsers.put(optionName, ResolvedUser.from(resolved.path("users").path(entityId)));
-                    optionMembers.put(optionName, ResolvedMember.from(entityId, resolved.path("members").path(entityId)));
+                    ResolvedUser user = ResolvedUser.from(resolved.path("users").path(entityId));
+                    ResolvedMember member = ResolvedMember.from(entityId, resolved.path("members").path(entityId));
+                    putIfPresent(optionUsers, optionName, user);
+                    putIfPresent(optionMembers, optionName, member);
                 }
-                case 7 -> optionChannels.put(optionName, ResolvedChannel.from(resolved.path("channels").path(entityId)));
-                case 8 -> optionRoles.put(optionName, ResolvedRole.from(resolved.path("roles").path(entityId)));
-                case 11 -> optionAttachments.put(optionName, ResolvedAttachment.from(resolved.path("attachments").path(entityId)));
+                case 7 -> putIfPresent(optionChannels, optionName,
+                        ResolvedChannel.from(resolved.path("channels").path(entityId)));
+                case 8 -> putIfPresent(optionRoles, optionName,
+                        ResolvedRole.from(resolved.path("roles").path(entityId)));
+                case 11 -> putIfPresent(optionAttachments, optionName,
+                        ResolvedAttachment.from(resolved.path("attachments").path(entityId)));
                 default -> {
                     // not a resolved-entity option
                 }
+            }
+        }
+
+
+        private static <T> void putIfPresent(Map<String, Object> map, String key, T value) {
+            if (key != null && value != null) {
+                map.put(key, value);
             }
         }
 

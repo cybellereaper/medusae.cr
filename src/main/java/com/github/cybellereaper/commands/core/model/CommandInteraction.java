@@ -1,5 +1,6 @@
 package com.github.cybellereaper.commands.core.model;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -29,14 +30,14 @@ public record CommandInteraction(
         Map<String, Object> optionAttachments
 ) {
     public CommandInteraction {
-        options = options == null ? Map.of() : Map.copyOf(options);
+        options = immutableWithoutNulls(options);
         userPermissions = userPermissions == null ? Set.of() : Set.copyOf(userPermissions);
         botPermissions = botPermissions == null ? Set.of() : Set.copyOf(botPermissions);
-        optionUsers = optionUsers == null ? Map.of() : Map.copyOf(optionUsers);
-        optionMembers = optionMembers == null ? Map.of() : Map.copyOf(optionMembers);
-        optionChannels = optionChannels == null ? Map.of() : Map.copyOf(optionChannels);
-        optionRoles = optionRoles == null ? Map.of() : Map.copyOf(optionRoles);
-        optionAttachments = optionAttachments == null ? Map.of() : Map.copyOf(optionAttachments);
+        optionUsers = immutableWithoutNulls(optionUsers);
+        optionMembers = immutableWithoutNulls(optionMembers);
+        optionChannels = immutableWithoutNulls(optionChannels);
+        optionRoles = immutableWithoutNulls(optionRoles);
+        optionAttachments = immutableWithoutNulls(optionAttachments);
     }
 
     public CommandInteraction(
@@ -69,5 +70,24 @@ public record CommandInteraction(
             return subcommandGroup + "/" + subcommand;
         }
         return subcommand;
+    }
+
+    private static <K, V> Map<K, V> immutableWithoutNulls(Map<K, V> source) {
+        if (source == null || source.isEmpty()) {
+            return Map.of();
+        }
+
+        Map<K, V> cleaned = new LinkedHashMap<>();
+        for (Map.Entry<K, V> entry : source.entrySet()) {
+            if (entry.getKey() != null && entry.getValue() != null) {
+                cleaned.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        if (cleaned.isEmpty()) {
+            return Map.of();
+        }
+
+        return Map.copyOf(cleaned);
     }
 }

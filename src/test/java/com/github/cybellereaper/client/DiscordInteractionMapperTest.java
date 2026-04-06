@@ -69,4 +69,40 @@ class DiscordInteractionMapperTest {
         assertNotNull(member);
         assertEquals("42", member.userId());
     }
+
+
+    @Test
+    void ignoresMissingResolvedMemberInsteadOfCrashing() throws Exception {
+        DiscordInteractionMapper mapper = new DiscordInteractionMapper();
+        var node = new ObjectMapper().readTree("""
+                {
+                  "id":"1",
+                  "token":"t",
+                  "type":2,
+                  "data":{
+                    "name":"user",
+                    "type":1,
+                    "options":[
+                      {
+                        "name":"target",
+                        "type":6,
+                        "value":"42",
+                        "resolved":{
+                          "users":{"42":{"id":"42","username":"tester"}}
+                        }
+                      }
+                    ]
+                  }
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(node, (id, token, type, data) -> {});
+
+        assertDoesNotThrow(() -> {
+            var interaction = mapper.toCoreInteraction(node, context);
+            assertNotNull(interaction.optionUsers().get("target"));
+            assertFalse(interaction.optionMembers().containsKey("target"));
+        });
+    }
+
 }
