@@ -17,7 +17,11 @@ import java.util.Collections;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReferenceArray;
@@ -164,6 +168,7 @@ class DiscordGatewayClientTest {
         );
         try {
             CapturingWebSocket socket = new CapturingWebSocket();
+            client.onOpen(socket);
             client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
 
             JsonNode sentPayload = mapper.readTree(socket.lastSentText.get());
@@ -198,7 +203,85 @@ class DiscordGatewayClientTest {
         }
     }
 
+    @Test
+    void helloSendsResumeWhenSessionStateExists() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        ManualScheduledExecutor scheduler = new ManualScheduledExecutor();
+        DiscordGatewayClient client = gatewayClient(mapper, scheduler);
+        try {
+            CapturingWebSocket socket = new CapturingWebSocket();
+            client.onText(socket, """
+                    {"op":0,"t":"READY","s":3,"d":{"session_id":"abc","resume_gateway_url":"wss://gateway.discord.gg"}}
+                    """, true);
+            client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
+
+            JsonNode payload = mapper.readTree(socket.lastSentText.get());
+            assertEquals(6, payload.path("op").asInt());
+            assertEquals("abc", payload.path("d").path("session_id").asText());
+            assertEquals(3, payload.path("d").path("seq").asInt());
+            assertNotNull(scheduler.fixedRateTask, "heartbeat task should be scheduled from HELLO");
+        } finally {
+            client.close();
+        }
+    }
+
+    @Test
+    void invalidSessionWithoutResumeForcesIdentifyOnNextHello() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        ManualScheduledExecutor scheduler = new ManualScheduledExecutor();
+        DiscordGatewayClient client = gatewayClient(mapper, scheduler);
+        try {
+            CapturingWebSocket socket = new CapturingWebSocket();
+            client.onText(socket, """
+                    {"op":0,"t":"READY","s":10,"d":{"session_id":"abc","resume_gateway_url":"wss://gateway.discord.gg"}}
+                    """, true);
+            client.onText(socket, "{\"op\":9,\"d\":false}", true);
+            client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
+
+            JsonNode payload = mapper.readTree(socket.lastSentText.get());
+            assertEquals(2, payload.path("op").asInt(), "invalid non-resumable session should trigger IDENTIFY");
+        } finally {
+            client.close();
+        }
+    }
+
+    @Test
+    void missingHeartbeatAckTriggersReconnectInsteadOfSendingAnotherHeartbeat() {
+        ObjectMapper mapper = new ObjectMapper();
+        ManualScheduledExecutor scheduler = new ManualScheduledExecutor();
+        DiscordGatewayClient client = gatewayClient(mapper, scheduler);
+        try {
+            CapturingWebSocket socket = new CapturingWebSocket();
+            client.onOpen(socket);
+            client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
+
+            assertNotNull(scheduler.fixedRateTask);
+            int baselineMessages = socket.sentCount.get();
+            setHeartbeatAcked(client, false);
+
+            scheduler.fixedRateTask.run();
+            assertEquals(baselineMessages, socket.sentCount.get(), "heartbeat should not send without ACK");
+            assertNotNull(scheduler.scheduledTask, "reconnect should be scheduled after missed ACK");
+        } finally {
+            client.close();
+        }
+    }
+
+    private static void setHeartbeatAcked(DiscordGatewayClient client, boolean acked) {
+        try {
+            var field = DiscordGatewayClient.class.getDeclaredField("heartbeatAcked");
+            field.setAccessible(true);
+            field.set(client, acked);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Failed to mutate heartbeatAcked in test setup", exception);
+        }
+    }
+
     private static DiscordGatewayClient gatewayClient(ObjectMapper mapper) {
+        return gatewayClient(mapper, Executors.newSingleThreadScheduledExecutor());
+    }
+
+    private static DiscordGatewayClient gatewayClient(ObjectMapper mapper, ScheduledExecutorService scheduler) {
         HttpClient httpClient = HttpClient.newHttpClient();
         DiscordClientConfig config = DiscordClientConfig.builder("token")
                 .intents(0)
@@ -213,7 +296,7 @@ class DiscordGatewayClientTest {
                 config,
                 restClient,
                 new DirectExecutorService(),
-                Executors.newSingleThreadScheduledExecutor()
+                scheduler
         );
     }
 
@@ -296,11 +379,109 @@ class DiscordGatewayClientTest {
 
     private static final class CapturingWebSocket extends StubWebSocket {
         private final AtomicReference<String> lastSentText = new AtomicReference<>();
+        private final AtomicInteger sentCount = new AtomicInteger();
 
         @Override
         public CompletableFuture<WebSocket> sendText(CharSequence data, boolean last) {
+            sentCount.incrementAndGet();
             lastSentText.set(data.toString());
             return CompletableFuture.completedFuture(this);
+        }
+    }
+
+    private static final class ManualScheduledExecutor extends AbstractExecutorService implements ScheduledExecutorService {
+        private volatile boolean shutdown;
+        private Runnable fixedRateTask;
+        private Runnable scheduledTask;
+
+        @Override
+        public ScheduledFuture<?> schedule(Runnable command, long delay, TimeUnit unit) {
+            scheduledTask = command;
+            return new CompletedScheduledFuture();
+        }
+
+        @Override
+        public <V> ScheduledFuture<V> schedule(Callable<V> callable, long delay, TimeUnit unit) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit) {
+            fixedRateTask = command;
+            return new CompletedScheduledFuture();
+        }
+
+        @Override
+        public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void shutdown() {
+            shutdown = true;
+        }
+
+        @Override
+        public List<Runnable> shutdownNow() {
+            shutdown = true;
+            return Collections.emptyList();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return shutdown;
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return shutdown;
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            return shutdown;
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            command.run();
+        }
+    }
+
+    private static final class CompletedScheduledFuture implements ScheduledFuture<Object> {
+        @Override
+        public long getDelay(TimeUnit unit) {
+            return 0;
+        }
+
+        @Override
+        public int compareTo(Delayed other) {
+            return 0;
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            return true;
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return false;
+        }
+
+        @Override
+        public boolean isDone() {
+            return true;
+        }
+
+        @Override
+        public Object get() {
+            return null;
+        }
+
+        @Override
+        public Object get(long timeout, TimeUnit unit) {
+            return null;
         }
     }
 

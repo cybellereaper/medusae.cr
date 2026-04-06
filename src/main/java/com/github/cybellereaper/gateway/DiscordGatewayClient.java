@@ -10,14 +10,20 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 public final class DiscordGatewayClient implements WebSocket.Listener, AutoCloseable {
+    private static final System.Logger LOGGER = System.getLogger(DiscordGatewayClient.class.getName());
+    private static final Duration RECONNECT_BASE_DELAY = Duration.ofSeconds(1);
+    private static final Duration RECONNECT_MAX_DELAY = Duration.ofSeconds(30);
+
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final DiscordClientConfig config;
@@ -28,6 +34,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     private final Map<String, CopyOnWriteArrayList<Consumer<JsonNode>>> listeners = new ConcurrentHashMap<>();
     private final Map<String, CopyOnWriteArrayList<TypedEventListener<?>>> typedListeners = new ConcurrentHashMap<>();
 
+    private final Object textBufferLock = new Object();
     private final StringBuilder textBuffer = new StringBuilder();
 
     private volatile WebSocket webSocket;
@@ -38,7 +45,10 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     private volatile boolean heartbeatAcked = true;
     private volatile boolean resumeOnReconnect = false;
     private volatile ScheduledFuture<?> heartbeatTask;
+    private volatile ScheduledFuture<?> reconnectTask;
     private final AtomicBoolean reconnecting = new AtomicBoolean(false);
+    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private final AtomicInteger reconnectAttempts = new AtomicInteger(0);
 
     public DiscordGatewayClient(
             HttpClient httpClient,
@@ -73,6 +83,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     }
 
     public void connect() {
+        ensureOpen();
         GatewayBotInfo gatewayBotInfo = restClient.getGatewayBotInfo();
         this.gatewayUri = buildGatewayUri(gatewayBotInfo.url());
         this.webSocket = connect(gatewayUri);
@@ -117,10 +128,14 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     }
 
     private WebSocket connect(URI uri) {
-        return httpClient.newWebSocketBuilder()
-                .connectTimeout(config.requestTimeout())
-                .buildAsync(uri, this)
-                .join();
+        try {
+            return httpClient.newWebSocketBuilder()
+                    .connectTimeout(config.requestTimeout())
+                    .buildAsync(uri, this)
+                    .join();
+        } catch (CompletionException completionException) {
+            throw new IllegalStateException("Failed to connect to Discord gateway URI: " + uri, completionException);
+        }
     }
 
     private URI buildGatewayUri(String baseUrl) {
@@ -132,18 +147,35 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
     @Override
     public void onOpen(WebSocket webSocket) {
+        if (closed.get()) {
+            webSocket.abort();
+            return;
+        }
         this.webSocket = webSocket;
+        reconnectAttempts.set(0);
+        LOGGER.log(System.Logger.Level.INFO, "Gateway connection opened");
         webSocket.request(1);
     }
 
     @Override
     public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-        textBuffer.append(data);
+        String payloadText = null;
+        synchronized (textBufferLock) {
+            textBuffer.append(data);
 
-        if (last) {
-            String payloadText = textBuffer.toString();
-            textBuffer.setLength(0);
-            handlePayload(webSocket, readJson(payloadText));
+            if (last) {
+                payloadText = textBuffer.toString();
+                textBuffer.setLength(0);
+            }
+        }
+
+        if (payloadText != null) {
+            try {
+                handlePayload(webSocket, readJson(payloadText));
+            } catch (RuntimeException exception) {
+                LOGGER.log(System.Logger.Level.WARNING, "Failed to handle gateway payload: " + exception.getMessage(), exception);
+                requestReconnect("payload handling failure");
+            }
         }
 
         webSocket.request(1);
@@ -159,14 +191,11 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
     @Override
     public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-        System.err.println("Gateway closed: " + statusCode + " - " + reason);
+        LOGGER.log(System.Logger.Level.WARNING, "Gateway closed (status={0}, reason={1})", statusCode, reason);
+        cancelHeartbeat();
 
-        if (heartbeatTask != null) {
-            heartbeatTask.cancel(true);
-        }
-
-        if (shouldReconnect(statusCode)) {
-            requestReconnect();
+        if (!closed.get() && shouldReconnect(statusCode)) {
+            requestReconnect("gateway close status " + statusCode);
         }
 
         return CompletableFuture.completedFuture(null);
@@ -174,7 +203,10 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
     @Override
     public void onError(WebSocket webSocket, Throwable error) {
-        requestReconnect();
+        LOGGER.log(System.Logger.Level.WARNING, "Gateway transport error: " + error.getMessage(), error);
+        if (!closed.get()) {
+            requestReconnect("gateway transport error");
+        }
     }
 
     private void handlePayload(WebSocket socket, JsonNode payload) {
@@ -191,13 +223,19 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         switch (op) {
             case 0 -> handleDispatch(payload.path("t").asText(), d);
             case 1 -> sendHeartbeat(socket);
-            case 7 -> requestReconnect();
+            case 7 -> requestReconnect("reconnect requested by Discord gateway");
             case 9 -> {
                 resumeOnReconnect = d.asBoolean(false);
-                requestReconnect();
+                if (!resumeOnReconnect) {
+                    clearResumableSessionState();
+                }
+                requestReconnect("invalid session");
             }
             case 10 -> {
-                long intervalMillis = d.path("heartbeat_interval").asLong();
+                long intervalMillis = d.path("heartbeat_interval").asLong(-1);
+                if (intervalMillis <= 0) {
+                    throw new IllegalStateException("Missing or invalid heartbeat interval in HELLO payload");
+                }
                 startHeartbeat(intervalMillis);
 
                 if (resumeOnReconnect && sessionId != null && resumeGatewayUri != null && sequence >= 0) {
@@ -207,7 +245,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
                 }
             }
             case 11 -> heartbeatAcked = true;
-            default -> { }
+            default -> LOGGER.log(System.Logger.Level.DEBUG, "Ignoring unsupported gateway op code: " + op);
         }
     }
 
@@ -244,15 +282,14 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             try {
                 task.run();
             } catch (RuntimeException exception) {
-                System.err.println("Gateway event listener failed: " + exception.getMessage());
+                LOGGER.log(System.Logger.Level.WARNING, "Gateway event listener failed: " + exception.getMessage(), exception);
             }
         });
     }
 
     private void startHeartbeat(long intervalMillis) {
-        if (heartbeatTask != null) {
-            heartbeatTask.cancel(true);
-        }
+        cancelHeartbeat();
+        heartbeatAcked = true;
 
         long initialDelay = ThreadLocalRandom.current().nextLong(Math.max(1, intervalMillis));
 
@@ -263,36 +300,68 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             }
 
             if (!heartbeatAcked) {
-                requestReconnect();
+                LOGGER.log(System.Logger.Level.WARNING, "Heartbeat ACK missing; reconnecting");
+                requestReconnect("heartbeat ACK timeout");
                 return;
             }
 
+            LOGGER.log(System.Logger.Level.DEBUG, "Sending gateway heartbeat");
             dispatchAsync(() -> sendHeartbeat(socket));
         }, initialDelay, intervalMillis, TimeUnit.MILLISECONDS);
     }
 
-    private void requestReconnect() {
+    private void requestReconnect(String reason) {
+        if (closed.get()) {
+            return;
+        }
         if (reconnecting.compareAndSet(false, true)) {
-            dispatchAsync(this::reconnect);
+            cancelHeartbeat();
+            scheduleReconnect(reason);
         }
     }
 
+    private void scheduleReconnect(String reason) {
+        int attempt = reconnectAttempts.getAndIncrement();
+        long rawDelayMillis = Math.min(
+                RECONNECT_MAX_DELAY.toMillis(),
+                RECONNECT_BASE_DELAY.toMillis() * (1L << Math.min(attempt, 5))
+        );
+        long jitterMillis = ThreadLocalRandom.current().nextLong(Math.max(1L, rawDelayMillis / 2L));
+        long delayMillis = rawDelayMillis + jitterMillis;
+        LOGGER.log(System.Logger.Level.INFO, "Scheduling gateway reconnect in {0}ms (reason={1}, attempt={2})",
+                delayMillis, reason, attempt + 1);
+
+        reconnectTask = scheduler.schedule(this::reconnect, delayMillis, TimeUnit.MILLISECONDS);
+    }
+
     private synchronized void reconnect() {
+        if (closed.get()) {
+            reconnecting.set(false);
+            return;
+        }
         try {
             if (webSocket != null) {
                 webSocket.abort();
             }
-        } catch (Exception ignored) {
+        } catch (Exception exception) {
+            LOGGER.log(System.Logger.Level.DEBUG, "Ignoring WebSocket abort failure during reconnect", exception);
         }
 
         URI target = (resumeOnReconnect && resumeGatewayUri != null) ? resumeGatewayUri : gatewayUri;
         if (target == null) {
+            LOGGER.log(System.Logger.Level.WARNING, "Reconnect requested before gateway URI initialization");
             reconnecting.set(false);
             return;
         }
 
         try {
             webSocket = connect(target);
+            LOGGER.log(System.Logger.Level.INFO, "Gateway reconnect initiated");
+        } catch (RuntimeException exception) {
+            LOGGER.log(System.Logger.Level.WARNING, "Gateway reconnect attempt failed: " + exception.getMessage(), exception);
+            reconnecting.set(false);
+            requestReconnect("reconnect attempt failed");
+            return;
         } finally {
             reconnecting.set(false);
         }
@@ -343,8 +412,12 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
                 .set("d", d);
 
         String json = writeJson(payload);
-        System.out.println("GW => " + json);
-        socket.sendText(json, true);
+        socket.sendText(json, true)
+                .exceptionally(throwable -> {
+                    LOGGER.log(System.Logger.Level.WARNING, "Failed to send gateway payload op={0}: {1}", op, throwable.getMessage());
+                    requestReconnect("gateway send failure");
+                    return null;
+                });
     }
 
     private JsonNode readJson(String json) {
@@ -360,6 +433,26 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             return objectMapper.writeValueAsString(value);
         } catch (IOException exception) {
             throw new RuntimeException("Failed to serialize gateway payload", exception);
+        }
+    }
+
+    private void clearResumableSessionState() {
+        sessionId = null;
+        resumeGatewayUri = null;
+        sequence = -1;
+    }
+
+    private void cancelHeartbeat() {
+        ScheduledFuture<?> currentHeartbeatTask = heartbeatTask;
+        heartbeatTask = null;
+        if (currentHeartbeatTask != null) {
+            currentHeartbeatTask.cancel(true);
+        }
+    }
+
+    private void ensureOpen() {
+        if (closed.get()) {
+            throw new IllegalStateException("Gateway client is already closed");
         }
     }
 
@@ -433,8 +526,14 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
     @Override
     public void close() {
-        if (heartbeatTask != null) {
-            heartbeatTask.cancel(true);
+        if (!closed.compareAndSet(false, true)) {
+            return;
+        }
+        cancelHeartbeat();
+        ScheduledFuture<?> currentReconnectTask = reconnectTask;
+        reconnectTask = null;
+        if (currentReconnectTask != null) {
+            currentReconnectTask.cancel(true);
         }
         scheduler.shutdownNow();
         listenerExecutor.shutdownNow();
@@ -442,7 +541,8 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         if (webSocket != null) {
             try {
                 webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "bye").join();
-            } catch (Exception ignored) {
+            } catch (Exception exception) {
+                LOGGER.log(System.Logger.Level.DEBUG, "Ignoring WebSocket close failure", exception);
             }
         }
     }
