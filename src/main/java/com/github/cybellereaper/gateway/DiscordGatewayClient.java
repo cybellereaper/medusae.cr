@@ -134,7 +134,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
                     .buildAsync(uri, this)
                     .join();
         } catch (CompletionException completionException) {
-            throw new IllegalStateException("Failed to connect to Discord gateway URI: " + uri, completionException);
+            throw new GatewayTransportException("Failed to connect to Discord gateway URI: " + uri, completionException);
         }
     }
 
@@ -172,7 +172,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         if (payloadText != null) {
             try {
                 handlePayload(webSocket, readJson(payloadText));
-            } catch (RuntimeException exception) {
+            } catch (GatewayClientException exception) {
                 LOGGER.log(System.Logger.Level.WARNING, "Failed to handle gateway payload: " + exception.getMessage(), exception);
                 requestReconnect("payload handling failure");
             }
@@ -210,7 +210,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     }
 
     private void handlePayload(WebSocket socket, JsonNode payload) {
-        System.out.println("GW <= " + payload);
+        LOGGER.log(System.Logger.Level.DEBUG, "GW <= {0}", payload);
 
         int op = payload.path("op").asInt();
         JsonNode d = payload.path("d");
@@ -234,7 +234,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             case 10 -> {
                 long intervalMillis = d.path("heartbeat_interval").asLong(-1);
                 if (intervalMillis <= 0) {
-                    throw new IllegalStateException("Missing or invalid heartbeat interval in HELLO payload");
+                    throw new GatewayProtocolException("Missing or invalid heartbeat interval in HELLO payload");
                 }
                 startHeartbeat(intervalMillis);
 
@@ -424,7 +424,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         try {
             return objectMapper.readTree(json);
         } catch (IOException exception) {
-            throw new RuntimeException("Failed to parse gateway payload", exception);
+            throw new GatewaySerializationException("Failed to parse gateway payload", exception);
         }
     }
 
@@ -432,7 +432,27 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         try {
             return objectMapper.writeValueAsString(value);
         } catch (IOException exception) {
-            throw new RuntimeException("Failed to serialize gateway payload", exception);
+            throw new GatewaySerializationException("Failed to serialize gateway payload", exception);
+        }
+    }
+
+    private void clearResumableSessionState() {
+        sessionId = null;
+        resumeGatewayUri = null;
+        sequence = -1;
+    }
+
+    private void cancelHeartbeat() {
+        ScheduledFuture<?> currentHeartbeatTask = heartbeatTask;
+        heartbeatTask = null;
+        if (currentHeartbeatTask != null) {
+            currentHeartbeatTask.cancel(true);
+        }
+    }
+
+    private void ensureOpen() {
+        if (closed.get()) {
+            throw new IllegalStateException("Gateway client is already closed");
         }
     }
 
@@ -507,7 +527,10 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             try {
                 return deserializer.deserialize(rawEvent, objectMapper);
             } catch (IllegalArgumentException exception) {
-                throw new RuntimeException("Failed to deserialize gateway event to " + eventType.getName(), exception);
+                throw new GatewaySerializationException(
+                        "Failed to deserialize gateway event to " + eventType.getName(),
+                        exception
+                );
             }
         }
 

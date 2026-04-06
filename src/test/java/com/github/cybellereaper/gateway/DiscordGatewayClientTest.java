@@ -267,6 +267,36 @@ class DiscordGatewayClientTest {
         }
     }
 
+    @Test
+    void malformedJsonPayloadSchedulesReconnect() {
+        ObjectMapper mapper = new ObjectMapper();
+        ManualScheduledExecutor scheduler = new ManualScheduledExecutor();
+        DiscordGatewayClient client = gatewayClient(mapper, scheduler);
+        try {
+            CapturingWebSocket socket = new CapturingWebSocket();
+
+            assertDoesNotThrow(() -> client.onText(socket, "{\"op\":", true));
+            assertNotNull(scheduler.scheduledTask, "malformed payload should trigger reconnect scheduling");
+        } finally {
+            client.close();
+        }
+    }
+
+    @Test
+    void helloWithoutHeartbeatIntervalSchedulesReconnect() {
+        ObjectMapper mapper = new ObjectMapper();
+        ManualScheduledExecutor scheduler = new ManualScheduledExecutor();
+        DiscordGatewayClient client = gatewayClient(mapper, scheduler);
+        try {
+            CapturingWebSocket socket = new CapturingWebSocket();
+
+            assertDoesNotThrow(() -> client.onText(socket, "{\"op\":10,\"d\":{}}", true));
+            assertNotNull(scheduler.scheduledTask, "invalid HELLO payload should trigger reconnect scheduling");
+        } finally {
+            client.close();
+        }
+    }
+
     private static void setHeartbeatAcked(DiscordGatewayClient client, boolean acked) {
         try {
             var field = DiscordGatewayClient.class.getDeclaredField("heartbeatAcked");
