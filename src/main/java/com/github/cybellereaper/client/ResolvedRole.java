@@ -7,7 +7,7 @@ public record ResolvedRole(
         String name,
         int color
 ) {
-    static ResolvedRole from(JsonNode node) {
+    public static ResolvedRole from(JsonNode node) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return null;
         }
