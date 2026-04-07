@@ -1,6 +1,6 @@
-# Jellycord API Reference (Core)
+# Medusae API Reference (Core)
 
-This API surface powers both Jellycord command styles: the direct Interaction Router API and the Annotation Command Framework.
+This API surface powers both Medusae command styles: the direct Interaction Router API and the Annotation Command Framework.
 
 ## `DiscordClient`
 
