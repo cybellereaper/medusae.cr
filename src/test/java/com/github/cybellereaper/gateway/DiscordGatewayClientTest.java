@@ -138,7 +138,7 @@ class DiscordGatewayClientTest {
             client.on("MESSAGE_CREATE", MessageCreateEvent.class, messageEventRef::set);
 
             client.onText(new StubWebSocket(), """
-                    {"op":0,"t":"READY","d":{"session_id":"abc","resume_gateway_url":"wss://gateway.discord.gg"}}
+                    {"op":0,"t":"READY","d":{"v":10,"session_id":"abc","resume_gateway_url":"wss://gateway.discord.gg","user":{"id":"1","username":"bot"}}}
                     """, true);
             client.onText(new StubWebSocket(), """
                     {"op":0,"t":"MESSAGE_CREATE","d":{"id":"m1","channel_id":"c1","guild_id":"g1","content":"Hello","author":{"id":"u1","username":"neo","discriminator":"0001"}}}

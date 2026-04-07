@@ -96,6 +96,38 @@ Read more in [`docs-command-framework.md`](docs-command-framework.md).
 
 ---
 
+
+## Annotation Gateway Events
+
+You can also register gateway listeners through annotations, using the same module-centric style as command annotations.
+
+```java
+AnnotatedGatewayEventBinder binder = new AnnotatedGatewayEventBinder();
+binder.bind(discordClient, new ModerationEvents());
+```
+
+```java
+@EventModule
+public final class ModerationEvents {
+    @OnGatewayEvent(value = "READY", payload = ReadyEvent.class)
+    public void onReady(ReadyEvent event) {
+        System.out.println("Session: " + event.sessionId());
+    }
+
+    @OnGatewayEvent(value = "MESSAGE_CREATE", payload = MessageCreateEvent.class)
+    public void onMessage(MessageCreateEvent event, DiscordClient client) {
+        if ("!ping".equals(event.content())) {
+            client.api().sendMessage(event.channelId(), DiscordMessage.ofContent("pong"));
+        }
+    }
+}
+```
+
+Handler signature rules:
+- Exactly one payload parameter compatible with `payload()`
+- Optional `DiscordClient` parameter for client access
+- Handler methods cannot be private
+
 ## Core configuration examples
 
 ### Sharding

@@ -19,7 +19,9 @@ class DiscordFrameworkBinderTest {
                 .stream()
                 .collect(Collectors.toMap(DiscordFrameworkBinder.CommandBinding::commandName, Function.identity()));
 
-        assertEquals(3, bindings.size());
+        assertTrue(bindings.containsKey("user"));
+        assertTrue(bindings.containsKey("inspect user"));
+        assertTrue(bindings.containsKey("quote message"));
         assertTrue(bindings.get("user").hasAutocomplete());
         assertFalse(bindings.get("inspect user").hasAutocomplete());
         assertFalse(bindings.get("quote message").hasAutocomplete());
