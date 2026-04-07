@@ -1,6 +1,6 @@
-# Jellycord
+# Medusae (formerly known as jellycord)
 
-Jellycord is a Java library for building Discord bots with **two complementary command frameworks**:
+Medusae is a Java library for building Discord bots with **two complementary command frameworks**:
 
 1. **Interaction Router API** (`DiscordClient` + `InteractionContext`) for lightweight, handler-first bots.
 2. **Annotation Command Framework** (`com.github.cybellereaper.commands`) for typed, modular command systems with checks, cooldowns, and schema sync.
@@ -21,7 +21,7 @@ Both frameworks run on the same gateway + REST core, so you can start simple and
 ## Installation
 
 ```gradle
-implementation 'com.github.cybellereaper:jellycord:1.0.0'
+implementation 'com.github.cybellereaper:Medusae:1.0.0'
 ```
 
 ---
