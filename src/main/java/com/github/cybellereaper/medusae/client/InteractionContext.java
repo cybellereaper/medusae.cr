@@ -4,54 +4,37 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.github.cybellereaper.medusae.commands.core.resolve.ConversionSupport;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 public final class InteractionContext {
-    private static final String DATA_FIELD = "data";
-    private static final String OPTIONS_FIELD = "options";
-    private static final String COMPONENTS_FIELD = "components";
-    private static final String NAME_FIELD = "name";
-    private static final String VALUE_FIELD = "value";
-    private static final String CUSTOM_ID_FIELD = "custom_id";
+    private static final String ID_FIELD = "id";
+    private static final String TOKEN_FIELD = "token";
     private static final String TYPE_FIELD = "type";
-    private static final String RESOLVED_FIELD = "resolved";
-    private static final int MAX_AUTOCOMPLETE_CHOICES = 25;
+    private static final String DATA_FIELD = "data";
+    private static final String GUILD_ID_FIELD = "guild_id";
+    private static final String CHANNEL_ID_FIELD = "channel_id";
+    private static final String MEMBER_FIELD = "member";
+    private static final String USER_FIELD = "user";
+    private static final String CUSTOM_ID_FIELD = "custom_id";
+    private static final String COMPONENTS_FIELD = "components";
+    private static final String VALUE_FIELD = "value";
 
     private final JsonNode interaction;
-    private final SlashCommandRouter.InteractionResponder responder;
+    private final JsonNode data;
+    private final InteractionOptionReader optionReader;
+    private final ResolvedEntityReader resolvedEntityReader;
+    private final InteractionResponderFacade responderFacade;
 
     private InteractionContext(JsonNode interaction, SlashCommandRouter.InteractionResponder responder) {
         this.interaction = Objects.requireNonNull(interaction, "interaction");
-        this.responder = Objects.requireNonNull(responder, "responder");
+        this.data = interaction.path(DATA_FIELD);
+        this.optionReader = new InteractionOptionReader(data.path(InteractionOptionReader.OPTIONS_FIELD));
+        this.resolvedEntityReader = new ResolvedEntityReader(data);
+        this.responderFacade = new InteractionResponderFacade(this::id, this::token, Objects.requireNonNull(responder, "responder"));
     }
 
     static InteractionContext from(JsonNode interaction, SlashCommandRouter.InteractionResponder responder) {
         return new InteractionContext(interaction, responder);
-    }
-
-    private static JsonNode findOptionNode(String optionName, JsonNode options) {
-        if (!options.isArray()) {
-            return null;
-        }
-        for (JsonNode option : options) {
-            if (optionName.equals(option.path(NAME_FIELD).asText())) {
-                return option;
-            }
-            JsonNode nested = findOptionNode(optionName, option.path(OPTIONS_FIELD));
-            if (nested != null) {
-                return nested;
-            }
-        }
-        return null;
-    }
-
-    private static String textOrNull(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        String text = node.asText();
-        return text.isBlank() ? null : text;
     }
 
     public JsonNode raw() {
@@ -59,15 +42,15 @@ public final class InteractionContext {
     }
 
     public String id() {
-        return interaction.path("id").asText("");
+        return interaction.path(ID_FIELD).asText("");
     }
 
     public String token() {
-        return interaction.path("token").asText("");
+        return interaction.path(TOKEN_FIELD).asText("");
     }
 
     public String commandName() {
-        return textOrNull(interaction.path(DATA_FIELD).path(NAME_FIELD));
+        return InteractionOptionReader.textOrNull(data.path("name"));
     }
 
     public int interactionType() {
@@ -75,30 +58,28 @@ public final class InteractionContext {
     }
 
     public int commandType() {
-        return interaction.path(DATA_FIELD).path(TYPE_FIELD).asInt(0);
+        return data.path(TYPE_FIELD).asInt(0);
     }
 
     public String guildId() {
-        return textOrNull(interaction.path("guild_id"));
+        return InteractionOptionReader.textOrNull(interaction.path(GUILD_ID_FIELD));
     }
 
     public String channelId() {
-        return textOrNull(interaction.path("channel_id"));
+        return InteractionOptionReader.textOrNull(interaction.path(CHANNEL_ID_FIELD));
     }
 
     public String userId() {
-        String memberUserId = textOrNull(interaction.path("member").path("user").path("id"));
-        return memberUserId != null ? memberUserId : textOrNull(interaction.path("user").path("id"));
+        String memberUserId = InteractionOptionReader.textOrNull(interaction.path(MEMBER_FIELD).path(USER_FIELD).path(ID_FIELD));
+        return memberUserId != null ? memberUserId : InteractionOptionReader.textOrNull(interaction.path(USER_FIELD).path(ID_FIELD));
     }
 
     public String customId() {
-        return textOrNull(interaction.path(DATA_FIELD).path(CUSTOM_ID_FIELD));
+        return InteractionOptionReader.textOrNull(data.path(CUSTOM_ID_FIELD));
     }
 
     public String optionString(String optionName) {
-        Objects.requireNonNull(optionName, "optionName");
-        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
-        return option == null ? null : textOrNull(option.path(VALUE_FIELD));
+        return optionReader.optionString(optionName);
     }
 
     public String requiredOptionString(String optionName) {
@@ -110,55 +91,39 @@ public final class InteractionContext {
     }
 
     public Long optionLong(String optionName) {
-        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
-        if (option == null) {
-            return null;
-        }
-        return ConversionSupport.parseLong(option.path(VALUE_FIELD));
+        return optionReader.optionLong(optionName);
     }
 
     public Integer optionInt(String optionName) {
-        Long value = optionLong(optionName);
-        if (value == null || value < Integer.MIN_VALUE || value > Integer.MAX_VALUE) {
-            return null;
-        }
-        return value.intValue();
+        return optionReader.optionInt(optionName);
     }
 
     public Boolean optionBoolean(String optionName) {
-        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
-        if (option == null) {
-            return null;
-        }
-        return ConversionSupport.parseBooleanStrict(option.path(VALUE_FIELD));
+        return optionReader.optionBoolean(optionName);
     }
 
     public Double optionDouble(String optionName) {
-        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
-        if (option == null) {
-            return null;
-        }
-        return ConversionSupport.parseDouble(option.path(VALUE_FIELD));
+        return optionReader.optionDouble(optionName);
     }
 
     public JsonNode resolvedAttachment(String attachmentId) {
-        return resolvedEntity("attachments", attachmentId);
+        return resolvedEntityReader.attachment(attachmentId);
     }
 
     public JsonNode resolvedUser(String userId) {
-        return resolvedEntity("users", userId);
+        return resolvedEntityReader.user(userId);
     }
 
     public JsonNode resolvedMember(String userId) {
-        return resolvedEntity("members", userId);
+        return resolvedEntityReader.member(userId);
     }
 
     public JsonNode resolvedRole(String roleId) {
-        return resolvedEntity("roles", roleId);
+        return resolvedEntityReader.role(roleId);
     }
 
     public JsonNode resolvedChannel(String channelId) {
-        return resolvedEntity("channels", channelId);
+        return resolvedEntityReader.channel(channelId);
     }
 
     public JsonNode optionResolvedAttachment(String optionName) {
@@ -178,23 +143,23 @@ public final class InteractionContext {
     }
 
     public ResolvedAttachment resolvedAttachmentValue(String attachmentId) {
-        return ResolvedAttachment.from(resolvedAttachment(attachmentId));
+        return resolvedEntityReader.attachmentValue(attachmentId);
     }
 
     public ResolvedUser resolvedUserValue(String userId) {
-        return ResolvedUser.from(resolvedUser(userId));
+        return resolvedEntityReader.userValue(userId);
     }
 
     public ResolvedMember resolvedMemberValue(String userId) {
-        return ResolvedMember.from(userId, resolvedMember(userId));
+        return resolvedEntityReader.memberValue(userId);
     }
 
     public ResolvedRole resolvedRoleValue(String roleId) {
-        return ResolvedRole.from(resolvedRole(roleId));
+        return resolvedEntityReader.roleValue(roleId);
     }
 
     public ResolvedChannel resolvedChannelValue(String channelId) {
-        return ResolvedChannel.from(resolvedChannel(channelId));
+        return resolvedEntityReader.channelValue(channelId);
     }
 
     public ResolvedAttachment optionResolvedAttachmentValue(String optionName) {
@@ -216,7 +181,7 @@ public final class InteractionContext {
     public String modalValue(String customId) {
         Objects.requireNonNull(customId, "customId");
 
-        JsonNode rows = interaction.path(DATA_FIELD).path(COMPONENTS_FIELD);
+        JsonNode rows = data.path(COMPONENTS_FIELD);
         if (!rows.isArray()) {
             return null;
         }
@@ -228,7 +193,7 @@ public final class InteractionContext {
             }
             for (JsonNode component : components) {
                 if (customId.equals(component.path(CUSTOM_ID_FIELD).asText())) {
-                    return textOrNull(component.path(VALUE_FIELD));
+                    return InteractionOptionReader.textOrNull(component.path(VALUE_FIELD));
                 }
             }
         }
@@ -240,8 +205,7 @@ public final class InteractionContext {
     }
 
     public void respondWithMessage(DiscordMessage message) {
-        Objects.requireNonNull(message, "message");
-        respond(4, message.toPayload());
+        responderFacade.respondWithMessage(message);
     }
 
     public void respondWithEmbeds(String content, List<DiscordEmbed> embeds) {
@@ -257,56 +221,22 @@ public final class InteractionContext {
     }
 
     public void respondWithModal(DiscordModal modal) {
-        Objects.requireNonNull(modal, "modal");
-        respond(9, modal.toPayload());
+        responderFacade.respondWithModal(modal);
     }
 
     public void respondWithAutocompleteChoices(List<AutocompleteChoice> choices) {
-        Objects.requireNonNull(choices, "choices");
-        if (choices.size() > MAX_AUTOCOMPLETE_CHOICES) {
-            throw new IllegalArgumentException("choices must contain at most " + MAX_AUTOCOMPLETE_CHOICES + " entries");
-        }
-        respond(8, Map.of("choices", choices.stream().map(AutocompleteChoice::toPayload).toList()));
+        responderFacade.respondWithAutocompleteChoices(choices);
     }
 
     public void deferMessage() {
-        respond(5, null);
+        responderFacade.deferMessage();
     }
 
     public void deferUpdate() {
-        respond(6, null);
-    }
-
-    private void respond(int type, Map<String, Object> data) {
-        String interactionId = id();
-        String interactionToken = token();
-        if (interactionId.isBlank() || interactionToken.isBlank()) {
-            throw new IllegalArgumentException("interaction must include id and token");
-        }
-        responder.respond(interactionId, interactionToken, type, data);
+        responderFacade.deferUpdate();
     }
 
     private String optionResolvedId(String optionName) {
-        JsonNode option = findOptionNode(optionName, interaction.path(DATA_FIELD).path(OPTIONS_FIELD));
-        if (option == null) {
-            return null;
-        }
-        JsonNode value = option.path(VALUE_FIELD);
-        if (value.isTextual()) {
-            String text = value.asText().trim();
-            return text.isEmpty() ? null : text;
-        }
-        if (value.isIntegralNumber()) {
-            return Long.toString(value.longValue());
-        }
-        return null;
-    }
-
-    private JsonNode resolvedEntity(String entityType, String id) {
-        if (id == null || id.isBlank()) {
-            return null;
-        }
-        JsonNode entity = interaction.path(DATA_FIELD).path(RESOLVED_FIELD).path(entityType).path(id);
-        return entity.isMissingNode() || entity.isNull() ? null : entity;
+        return optionReader.optionResolvedId(optionName);
     }
 }

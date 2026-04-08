@@ -44,6 +44,29 @@ class InteractionContextTest {
     }
 
     @Test
+    void returnsNullForInvalidOrEmptyOptionStrings() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "id": "1",
+                  "token": "abc",
+                  "type": 2,
+                  "data": {
+                    "options": [
+                      { "name": "blank", "value": "   " },
+                      { "name": "nullish", "value": null }
+                    ]
+                  }
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+        });
+
+        assertNull(context.optionString("blank"));
+        assertNull(context.optionString("nullish"));
+    }
+
+    @Test
     void validatesAutocompleteChoiceLimit() throws Exception {
         JsonNode interaction = MAPPER.readTree("""
                 {
@@ -98,6 +121,31 @@ class InteractionContextTest {
     }
 
     @Test
+    void prefersMemberUserOverTopLevelUserId() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "id": "55",
+                  "token": "abc",
+                  "type": 2,
+                  "member": {
+                    "user": {
+                      "id": "member-user"
+                    }
+                  },
+                  "user": {
+                    "id": "top-level-user"
+                  },
+                  "data": {}
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+        });
+
+        assertEquals("member-user", context.userId());
+    }
+
+    @Test
     void parsesNumericAndBooleanOptionsSafely() throws Exception {
         JsonNode interaction = MAPPER.readTree("""
                 {
@@ -112,7 +160,8 @@ class InteractionContextTest {
                       { "name": "enabled", "value": true },
                       { "name": "text_num", "value": "77" },
                       { "name": "text_bool", "value": "false" },
-                      { "name": "invalid_num", "value": "x42" }
+                      { "name": "invalid_num", "value": "x42" },
+                      { "name": "too_big_int", "value": 9223372036854775807 }
                     ]
                   },
                   "guild_id": "guild-1",
@@ -137,6 +186,7 @@ class InteractionContextTest {
         assertEquals(true, context.optionBoolean("enabled"));
         assertEquals(false, context.optionBoolean("text_bool"));
         assertNull(context.optionBoolean("missing"));
+        assertNull(context.optionInt("too_big_int"));
         assertEquals("guild-1", context.guildId());
         assertEquals("chan-9", context.channelId());
         assertEquals("user-3", context.userId());
@@ -241,5 +291,78 @@ class InteractionContextTest {
 
         assertNull(context.optionResolvedAttachment("missing"));
         assertNull(context.optionResolvedUserValue("missing"));
+    }
+
+    @Test
+    void resolvesNumericOptionIdsAgainstResolvedMaps() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "id": "88",
+                  "token": "tok",
+                  "type": 2,
+                  "data": {
+                    "options": [
+                      { "name": "target_role", "value": 123 }
+                    ],
+                    "resolved": {
+                      "roles": {
+                        "123": { "id": "123", "name": "numeric-role", "color": 7 }
+                      }
+                    }
+                  }
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+        });
+
+        assertEquals("numeric-role", context.optionResolvedRole("target_role").path("name").asText());
+    }
+
+    @Test
+    void readsModalFieldValuesFromComponents() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "id": "77",
+                  "token": "tok",
+                  "type": 5,
+                  "data": {
+                    "components": [
+                      {
+                        "components": [
+                          { "custom_id": "notes", "value": "  hi there  " },
+                          { "custom_id": "blank", "value": "   " }
+                        ]
+                      }
+                    ]
+                  }
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+        });
+
+        assertEquals("  hi there  ", context.modalValue("notes"));
+        assertNull(context.modalValue("blank"));
+        assertNull(context.modalValue("missing"));
+        assertThrows(NullPointerException.class, () -> context.modalValue(null));
+    }
+
+    @Test
+    void rejectsResponsesWithoutInteractionIdentity() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "type": 2,
+                  "data": {
+                    "name": "ping"
+                  }
+                }
+                """);
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+        });
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, context::deferMessage);
+        assertTrue(ex.getMessage().contains("id and token"));
     }
 }
