@@ -9,10 +9,7 @@ import com.github.cybellereaper.medusae.commands.core.exception.CheckFailedExcep
 import com.github.cybellereaper.medusae.commands.core.exception.CommandNotFoundException;
 import com.github.cybellereaper.medusae.commands.core.exception.RegistrationException;
 import com.github.cybellereaper.medusae.commands.core.exception.ResolutionException;
-import com.github.cybellereaper.medusae.commands.core.interaction.context.ComponentContext;
 import com.github.cybellereaper.medusae.commands.core.interaction.context.InteractionContext;
-import com.github.cybellereaper.medusae.commands.core.interaction.context.ModalContext;
-import com.github.cybellereaper.medusae.commands.core.interaction.context.SelectContext;
 import com.github.cybellereaper.medusae.commands.core.model.*;
 import com.github.cybellereaper.medusae.commands.core.parser.CommandParser;
 import com.github.cybellereaper.medusae.commands.core.parser.InteractionModuleParser;
@@ -201,11 +198,7 @@ public final class CommandFramework {
                     .orElseThrow(() -> new CommandNotFoundException("Unknown interaction route: " + interaction.type() + " " + interaction.customId()));
             InteractionHandler handler = resolved.handler();
 
-            InteractionContext context = switch (interaction.type()) {
-                case BUTTON -> new ComponentContext(interaction, responder, resolved.routeMatch().pathParams());
-                case MODAL -> new ModalContext(interaction, responder, resolved.routeMatch().pathParams());
-                default -> new SelectContext(interaction, responder, resolved.routeMatch().pathParams());
-            };
+            InteractionContext context = InteractionContext.from(interaction, responder, resolved.routeMatch().pathParams());
 
             enforceGuards(context, handler);
             applyCooldown(handler, interaction);
