@@ -38,4 +38,16 @@ class DiscordMessageTest {
         assertEquals(1, embeds.size());
         assertEquals("Title", embeds.get(0).get("title"));
     }
+
+    @Test
+    void toPayloadIncludesAllowedMentionsAndMessageReferenceWhenConfigured() {
+        DiscordMessage message = DiscordMessage.ofContent("reply")
+                .withAllowedMentions(Map.of("parse", List.of("users")))
+                .withMessageReference(Map.of("message_id", "123", "fail_if_not_exists", false));
+
+        Map<String, Object> payload = message.toPayload();
+
+        assertEquals(Map.of("parse", List.of("users")), payload.get("allowed_mentions"));
+        assertEquals(Map.of("message_id", "123", "fail_if_not_exists", false), payload.get("message_reference"));
+    }
 }

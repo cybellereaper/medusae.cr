@@ -12,12 +12,18 @@ public record DiscordMessage(
         String content,
         List<DiscordEmbed> embeds,
         List<DiscordActionRow> components,
-        boolean ephemeral
+        boolean ephemeral,
+        Map<String, Object> allowedMentions,
+        Map<String, Object> messageReference
 ) {
     private static final int EPHEMERAL_FLAG = 1 << 6;
 
     public DiscordMessage(String content, List<DiscordEmbed> embeds, boolean ephemeral) {
-        this(content, embeds, List.of(), ephemeral);
+        this(content, embeds, List.of(), ephemeral, Map.of(), Map.of());
+    }
+
+    public DiscordMessage(String content, List<DiscordEmbed> embeds, List<DiscordActionRow> components, boolean ephemeral) {
+        this(content, embeds, components, ephemeral, Map.of(), Map.of());
     }
 
     public DiscordMessage {
@@ -32,26 +38,37 @@ public record DiscordMessage(
         } else {
             components = components.stream().filter(Objects::nonNull).toList();
         }
+
+        allowedMentions = sanitizeOptionalPayload(allowedMentions);
+        messageReference = sanitizeOptionalPayload(messageReference);
     }
 
     public static DiscordMessage ofContent(String content) {
-        return new DiscordMessage(content, List.of(), List.of(), false);
+        return new DiscordMessage(content, List.of(), List.of(), false, Map.of(), Map.of());
     }
 
     public static DiscordMessage ofEmbeds(String content, List<DiscordEmbed> embeds) {
-        return new DiscordMessage(content, embeds, List.of(), false);
+        return new DiscordMessage(content, embeds, List.of(), false, Map.of(), Map.of());
     }
 
     public static DiscordMessage ofComponents(String content, List<DiscordActionRow> components) {
-        return new DiscordMessage(content, List.of(), components, false);
+        return new DiscordMessage(content, List.of(), components, false, Map.of(), Map.of());
     }
 
     public DiscordMessage withComponents(List<DiscordActionRow> componentRows) {
-        return new DiscordMessage(content, embeds, componentRows, ephemeral);
+        return new DiscordMessage(content, embeds, componentRows, ephemeral, allowedMentions, messageReference);
     }
 
     public DiscordMessage asEphemeral() {
-        return ephemeral ? this : new DiscordMessage(content, embeds, components, true);
+        return ephemeral ? this : new DiscordMessage(content, embeds, components, true, allowedMentions, messageReference);
+    }
+
+    public DiscordMessage withAllowedMentions(Map<String, Object> mentions) {
+        return new DiscordMessage(content, embeds, components, ephemeral, mentions, messageReference);
+    }
+
+    public DiscordMessage withMessageReference(Map<String, Object> reference) {
+        return new DiscordMessage(content, embeds, components, ephemeral, allowedMentions, reference);
     }
 
     public Map<String, Object> toPayload() {
@@ -76,6 +93,21 @@ public record DiscordMessage(
             payload.put("flags", EPHEMERAL_FLAG);
         }
 
+        if (!allowedMentions.isEmpty()) {
+            payload.put("allowed_mentions", allowedMentions);
+        }
+
+        if (!messageReference.isEmpty()) {
+            payload.put("message_reference", messageReference);
+        }
+
         return payload;
+    }
+
+    private static Map<String, Object> sanitizeOptionalPayload(Map<String, Object> value) {
+        if (value == null || value.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(value);
     }
 }

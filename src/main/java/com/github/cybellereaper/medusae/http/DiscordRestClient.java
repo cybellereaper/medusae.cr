@@ -8,11 +8,13 @@ import com.github.cybellereaper.medusae.client.SlashCommandDefinition;
 import com.github.cybellereaper.medusae.gateway.GatewayBotInfo;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +114,82 @@ public final class DiscordRestClient {
                 .method("POST", multipartBody.toPublisher());
 
         return requestInternal("POST", path, builder.build());
+    }
+
+    public JsonNode getMessage(String channelId, String messageId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        return request("GET", "/channels/" + channelId + "/messages/" + messageId, null);
+    }
+
+    public JsonNode editMessage(String channelId, String messageId, Map<String, Object> payload) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        Objects.requireNonNull(payload, "payload");
+        return request("PATCH", "/channels/" + channelId + "/messages/" + messageId, payload);
+    }
+
+    public JsonNode getChannelMessages(String channelId, Map<String, Object> query) {
+        requireNonBlank(channelId, "channelId");
+        Objects.requireNonNull(query, "query");
+        return request("GET", "/channels/" + channelId + "/messages" + toQueryString(query), null);
+    }
+
+    public JsonNode addReaction(String channelId, String messageId, String emoji) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        requireNonBlank(emoji, "emoji");
+        return request("PUT", "/channels/" + channelId + "/messages/" + messageId + "/reactions/" + emoji + "/@me", null);
+    }
+
+    public JsonNode removeOwnReaction(String channelId, String messageId, String emoji) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        requireNonBlank(emoji, "emoji");
+        return request("DELETE", "/channels/" + channelId + "/messages/" + messageId + "/reactions/" + emoji + "/@me", null);
+    }
+
+    public JsonNode removeUserReaction(String channelId, String messageId, String emoji, String userId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        requireNonBlank(emoji, "emoji");
+        requireNonBlank(userId, "userId");
+        return request("DELETE", "/channels/" + channelId + "/messages/" + messageId + "/reactions/" + emoji + "/" + userId, null);
+    }
+
+    public JsonNode clearMessageReactionEmoji(String channelId, String messageId, String emoji) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        requireNonBlank(emoji, "emoji");
+        return request("DELETE", "/channels/" + channelId + "/messages/" + messageId + "/reactions/" + emoji, null);
+    }
+
+    public JsonNode clearMessageReactions(String channelId, String messageId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        return request("DELETE", "/channels/" + channelId + "/messages/" + messageId + "/reactions", null);
+    }
+
+    public JsonNode pinMessage(String channelId, String messageId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        return request("PUT", "/channels/" + channelId + "/pins/" + messageId, null);
+    }
+
+    public JsonNode unpinMessage(String channelId, String messageId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        return request("DELETE", "/channels/" + channelId + "/pins/" + messageId, null);
+    }
+
+    public JsonNode listPinnedMessages(String channelId) {
+        requireNonBlank(channelId, "channelId");
+        return request("GET", "/channels/" + channelId + "/pins", null);
+    }
+
+    public JsonNode triggerTypingIndicator(String channelId) {
+        requireNonBlank(channelId, "channelId");
+        return request("POST", "/channels/" + channelId + "/typing", null);
     }
 
     public JsonNode createGuildApplicationCommand(String applicationId, String guildId, SlashCommandDefinition command) {
@@ -308,5 +386,29 @@ public final class DiscordRestClient {
             return objectMapper.createObjectNode();
         }
         return readJson(json);
+    }
+
+    private String toQueryString(Map<String, Object> query) {
+        if (query.isEmpty()) {
+            return "";
+        }
+
+        StringBuilder builder = new StringBuilder("?");
+        boolean first = true;
+        for (Map.Entry<String, Object> entry : query.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if (key == null || key.isBlank() || value == null) {
+                continue;
+            }
+            if (!first) {
+                builder.append('&');
+            }
+            builder.append(URLEncoder.encode(key, StandardCharsets.UTF_8))
+                    .append('=')
+                    .append(URLEncoder.encode(String.valueOf(value), StandardCharsets.UTF_8));
+            first = false;
+        }
+        return first ? "" : builder.toString();
     }
 }

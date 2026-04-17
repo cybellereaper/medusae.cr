@@ -79,6 +79,30 @@ public final class DiscordApi {
         return restClient.request("DELETE", "/channels/" + channelId + "/messages/" + messageId, null);
     }
 
+    public JsonNode getMessage(String channelId, String messageId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        return restClient.getMessage(channelId, messageId);
+    }
+
+    public JsonNode editMessage(String channelId, String messageId, DiscordMessage message) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        Objects.requireNonNull(message, "message");
+        return restClient.editMessage(channelId, messageId, message.toPayload());
+    }
+
+    public JsonNode getChannelMessages(String channelId) {
+        requireNonBlank(channelId, "channelId");
+        return restClient.getChannelMessages(channelId, Map.of());
+    }
+
+    public JsonNode getChannelMessages(String channelId, Map<String, Object> query) {
+        requireNonBlank(channelId, "channelId");
+        Objects.requireNonNull(query, "query");
+        return restClient.getChannelMessages(channelId, query);
+    }
+
     public JsonNode sendMessage(String channelId, DiscordMessage message) {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(message, "message");
@@ -89,6 +113,63 @@ public final class DiscordApi {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(message, "message");
         return restClient.sendMessageWithAttachments(channelId, message.toPayload(), attachments);
+    }
+
+    public JsonNode addReaction(String channelId, String messageId, String emoji) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        requireNonBlank(emoji, "emoji");
+        return restClient.addReaction(channelId, messageId, emoji);
+    }
+
+    public JsonNode removeOwnReaction(String channelId, String messageId, String emoji) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        requireNonBlank(emoji, "emoji");
+        return restClient.removeOwnReaction(channelId, messageId, emoji);
+    }
+
+    public JsonNode removeUserReaction(String channelId, String messageId, String emoji, String userId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        requireNonBlank(emoji, "emoji");
+        requireNonBlank(userId, "userId");
+        return restClient.removeUserReaction(channelId, messageId, emoji, userId);
+    }
+
+    public JsonNode clearMessageReactionEmoji(String channelId, String messageId, String emoji) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        requireNonBlank(emoji, "emoji");
+        return restClient.clearMessageReactionEmoji(channelId, messageId, emoji);
+    }
+
+    public JsonNode clearMessageReactions(String channelId, String messageId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        return restClient.clearMessageReactions(channelId, messageId);
+    }
+
+    public JsonNode pinMessage(String channelId, String messageId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        return restClient.pinMessage(channelId, messageId);
+    }
+
+    public JsonNode unpinMessage(String channelId, String messageId) {
+        requireNonBlank(channelId, "channelId");
+        requireNonBlank(messageId, "messageId");
+        return restClient.unpinMessage(channelId, messageId);
+    }
+
+    public JsonNode listPinnedMessages(String channelId) {
+        requireNonBlank(channelId, "channelId");
+        return restClient.listPinnedMessages(channelId);
+    }
+
+    public JsonNode triggerTypingIndicator(String channelId) {
+        requireNonBlank(channelId, "channelId");
+        return restClient.triggerTypingIndicator(channelId);
     }
 
     // Roles
