@@ -153,6 +153,11 @@ final class SlashCommandRouter {
         respond(interaction, ResponseType.CHANNEL_MESSAGE, message.toPayload());
     }
 
+    void respondWithUpdatedMessage(JsonNode interaction, DiscordMessage message) {
+        Objects.requireNonNull(message, "message");
+        respond(interaction, ResponseType.UPDATE_MESSAGE, message.toPayload());
+    }
+
     void respondWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
         respondWithMessage(interaction, DiscordMessage.ofEmbeds(content, embeds));
     }
@@ -297,6 +302,7 @@ final class SlashCommandRouter {
         CHANNEL_MESSAGE(4),
         DEFERRED_CHANNEL_MESSAGE(5),
         DEFERRED_MESSAGE_UPDATE(6),
+        UPDATE_MESSAGE(7),
         AUTOCOMPLETE(8),
         MODAL(9);
 

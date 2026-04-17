@@ -187,6 +187,25 @@ class SlashCommandRouterTest {
     }
 
     @Test
+    void respondWithUpdatedMessageUsesUpdateMessageResponseType() throws Exception {
+        AtomicReference<Integer> responseType = new AtomicReference<>();
+        AtomicReference<Map<String, Object>> responseData = new AtomicReference<>();
+
+        SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
+            responseType.set(type);
+            responseData.set(data);
+        });
+
+        router.respondWithUpdatedMessage(
+                interactionPayload(3, null, "confirm_button", "123", "abc", null, null),
+                DiscordMessage.ofContent("updated content")
+        );
+
+        assertEquals(7, responseType.get());
+        assertEquals("updated content", responseData.get().get("content"));
+    }
+
+    @Test
     void respondWithAutocompleteChoicesUsesCorrectResponseType() throws Exception {
         AtomicReference<Integer> responseType = new AtomicReference<>();
         AtomicReference<Map<String, Object>> responseData = new AtomicReference<>();

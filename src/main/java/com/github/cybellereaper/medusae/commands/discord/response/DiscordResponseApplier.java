@@ -84,12 +84,17 @@ public final class DiscordResponseApplier implements CommandResponder {
         switch (reply.mode()) {
             case DEFER_REPLY -> context.deferMessage();
             case DEFER_UPDATE -> context.deferUpdate();
-            default -> context.respondWithMessage(new DiscordMessage(
-                    reply.content(),
-                    toEmbeds(reply.embeds()),
-                    toRows(reply.components()),
-                    reply.isEphemeral()
-            ));
+            case UPDATE_MESSAGE -> context.respondWithUpdatedMessage(toDiscordMessage(reply));
+            default -> context.respondWithMessage(toDiscordMessage(reply));
         }
+    }
+
+    private static DiscordMessage toDiscordMessage(InteractionReply reply) {
+        return new DiscordMessage(
+                reply.content(),
+                toEmbeds(reply.embeds()),
+                toRows(reply.components()),
+                reply.isEphemeral()
+        );
     }
 }
