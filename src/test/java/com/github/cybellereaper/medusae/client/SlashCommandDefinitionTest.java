@@ -49,6 +49,35 @@ class SlashCommandDefinitionTest {
         assertTrue(payload.containsKey("default_member_permissions"));
     }
 
+
+    @Test
+    void includesExtendedOptionFieldsInPayload() {
+        SlashCommandOptionDefinition option = new SlashCommandOptionDefinition(
+                SlashCommandOptionDefinition.STRING,
+                "topic",
+                "Topic",
+                true,
+                false,
+                List.of(),
+                List.of(new SlashCommandOptionChoice("General", "general")),
+                null,
+                null,
+                2,
+                32,
+                List.of(),
+                Map.of("de", "thema"),
+                Map.of("de", "Thema")
+        );
+
+        Map<String, Object> payload = option.toRequestPayload();
+
+        assertTrue(payload.containsKey("choices"));
+        assertEquals(2, payload.get("min_length"));
+        assertEquals(32, payload.get("max_length"));
+        assertTrue(payload.containsKey("name_localizations"));
+        assertTrue(payload.containsKey("description_localizations"));
+    }
+
     @Test
     void validatesRequiredFields() {
         assertThrows(IllegalArgumentException.class, () -> SlashCommandDefinition.simple("", "desc"));
@@ -72,5 +101,6 @@ class SlashCommandDefinitionTest {
     void autocompleteChoiceValidatesInput() {
         assertThrows(IllegalArgumentException.class, () -> new AutocompleteChoice("", "value"));
         assertThrows(IllegalArgumentException.class, () -> new AutocompleteChoice("name", ""));
+        assertThrows(IllegalArgumentException.class, () -> new SlashCommandOptionChoice("", "value"));
     }
 }

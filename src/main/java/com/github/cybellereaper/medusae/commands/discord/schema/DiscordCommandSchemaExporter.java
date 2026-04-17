@@ -1,9 +1,11 @@
 package com.github.cybellereaper.medusae.commands.discord.schema;
 
 import com.github.cybellereaper.medusae.client.SlashCommandDefinition;
+import com.github.cybellereaper.medusae.client.SlashCommandOptionChoice;
 import com.github.cybellereaper.medusae.client.SlashCommandOptionDefinition;
 import com.github.cybellereaper.medusae.commands.core.model.CommandDefinition;
 import com.github.cybellereaper.medusae.commands.core.model.CommandHandler;
+import com.github.cybellereaper.medusae.commands.core.model.CommandOptionChoice;
 import com.github.cybellereaper.medusae.commands.core.model.CommandParameter;
 
 import java.util.ArrayList;
@@ -64,7 +66,40 @@ public final class DiscordCommandSchemaExporter {
     }
 
     private SlashCommandOptionDefinition toOption(CommandParameter parameter) {
-        return new SlashCommandOptionDefinition(mapOptionType(parameter), parameter.optionName(), parameter.description(), parameter.required(), parameter.autocompleteId() != null);
+        return new SlashCommandOptionDefinition(
+                mapOptionType(parameter),
+                parameter.optionName(),
+                parameter.description(),
+                parameter.required(),
+                parameter.autocompleteId() != null,
+                List.of(),
+                toChoices(parameter),
+                parameter.minValue(),
+                parameter.maxValue(),
+                parameter.minLength(),
+                parameter.maxLength(),
+                parameter.channelTypes(),
+                parameter.nameLocalizations(),
+                parameter.descriptionLocalizations()
+        );
+    }
+
+    private List<SlashCommandOptionChoice> toChoices(CommandParameter parameter) {
+        return parameter.choices().stream().map(choice -> new SlashCommandOptionChoice(choice.name(), toChoiceValue(parameter, choice))).toList();
+    }
+
+    private Object toChoiceValue(CommandParameter parameter, CommandOptionChoice choice) {
+        Class<?> optionType = parameter.optionType();
+        if (optionType == int.class || optionType == Integer.class) {
+            return Integer.parseInt(choice.value());
+        }
+        if (optionType == long.class || optionType == Long.class) {
+            return Long.parseLong(choice.value());
+        }
+        if (optionType == double.class || optionType == Double.class) {
+            return Double.parseDouble(choice.value());
+        }
+        return choice.value();
     }
 
     private int mapOptionType(CommandParameter parameter) {

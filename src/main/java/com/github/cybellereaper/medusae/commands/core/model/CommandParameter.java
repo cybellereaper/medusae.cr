@@ -1,6 +1,8 @@
 package com.github.cybellereaper.medusae.commands.core.model;
 
 import java.lang.reflect.Parameter;
+import java.util.List;
+import java.util.Map;
 
 public record CommandParameter(
         int index,
@@ -12,6 +14,14 @@ public record CommandParameter(
         boolean required,
         String defaultValue,
         String autocompleteId,
-        boolean wrappedOptional
+        boolean wrappedOptional,
+        List<CommandOptionChoice> choices,
+        Double minValue,
+        Double maxValue,
+        Integer minLength,
+        Integer maxLength,
+        List<Integer> channelTypes,
+        Map<String, String> nameLocalizations,
+        Map<String, String> descriptionLocalizations
 ) {
 }

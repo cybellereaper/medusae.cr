@@ -11,7 +11,15 @@ public record SlashCommandOptionDefinition(
         String description,
         boolean required,
         boolean autocomplete,
-        List<SlashCommandOptionDefinition> options
+        List<SlashCommandOptionDefinition> options,
+        List<SlashCommandOptionChoice> choices,
+        Double minValue,
+        Double maxValue,
+        Integer minLength,
+        Integer maxLength,
+        List<Integer> channelTypes,
+        Map<String, String> nameLocalizations,
+        Map<String, String> descriptionLocalizations
 ) {
     public static final int SUBCOMMAND = 1;
     public static final int SUBCOMMAND_GROUP = 2;
@@ -29,10 +37,18 @@ public record SlashCommandOptionDefinition(
         this(type, name, description, required, autocomplete, List.of());
     }
 
+    public SlashCommandOptionDefinition(int type, String name, String description, boolean required, boolean autocomplete, List<SlashCommandOptionDefinition> options) {
+        this(type, name, description, required, autocomplete, options, List.of(), null, null, null, null, List.of(), Map.of(), Map.of());
+    }
+
     public SlashCommandOptionDefinition {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(description, "description");
         options = options == null ? List.of() : List.copyOf(options);
+        choices = choices == null ? List.of() : List.copyOf(choices);
+        channelTypes = channelTypes == null ? List.of() : List.copyOf(channelTypes);
+        nameLocalizations = nameLocalizations == null ? Map.of() : Map.copyOf(nameLocalizations);
+        descriptionLocalizations = descriptionLocalizations == null ? Map.of() : Map.copyOf(descriptionLocalizations);
 
         if (type < SUBCOMMAND || type > ATTACHMENT) {
             throw new IllegalArgumentException("Unsupported slash command option type: " + type);
@@ -67,11 +83,37 @@ public record SlashCommandOptionDefinition(
         payload.put("name", name);
         payload.put("description", description);
 
+        if (!nameLocalizations.isEmpty()) {
+            payload.put("name_localizations", nameLocalizations);
+        }
+        if (!descriptionLocalizations.isEmpty()) {
+            payload.put("description_localizations", descriptionLocalizations);
+        }
+
         if (type >= STRING) {
             payload.put("required", required);
             if (autocomplete) {
                 payload.put("autocomplete", true);
             }
+        }
+
+        if (!choices.isEmpty()) {
+            payload.put("choices", choices.stream().map(SlashCommandOptionChoice::toRequestPayload).toList());
+        }
+        if (minValue != null) {
+            payload.put("min_value", minValue);
+        }
+        if (maxValue != null) {
+            payload.put("max_value", maxValue);
+        }
+        if (minLength != null) {
+            payload.put("min_length", minLength);
+        }
+        if (maxLength != null) {
+            payload.put("max_length", maxLength);
+        }
+        if (!channelTypes.isEmpty()) {
+            payload.put("channel_types", channelTypes);
         }
 
         if (!options.isEmpty()) {

@@ -10,7 +10,6 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.util.*;
-import java.util.Optional;
 
 public final class CommandParser {
     private static boolean isCommandHandlerMethod(CommandType commandType, Method method) {
@@ -146,6 +145,73 @@ public final class CommandParser {
         return normalized;
     }
 
+    private static List<CommandOptionChoice> extractChoices(Parameter parameter) {
+        OptionChoice[] choices = parameter.getAnnotationsByType(OptionChoice.class);
+        if (choices.length == 0) {
+            return List.of();
+        }
+        return Arrays.stream(choices)
+                .map(choice -> new CommandOptionChoice(choice.name(), choice.value()))
+                .toList();
+    }
+
+    private static Map<String, String> extractNameLocalizations(Parameter parameter) {
+        NameLocalization[] localizations = parameter.getAnnotationsByType(NameLocalization.class);
+        if (localizations.length == 0) {
+            return Map.of();
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        for (NameLocalization localization : localizations) {
+            result.put(normalizeName(localization.locale()), localization.value());
+        }
+        return Map.copyOf(result);
+    }
+
+    private static Map<String, String> extractDescriptionLocalizations(Parameter parameter) {
+        DescriptionLocalization[] localizations = parameter.getAnnotationsByType(DescriptionLocalization.class);
+        if (localizations.length == 0) {
+            return Map.of();
+        }
+        Map<String, String> result = new LinkedHashMap<>();
+        for (DescriptionLocalization localization : localizations) {
+            result.put(normalizeName(localization.locale()), localization.value());
+        }
+        return Map.copyOf(result);
+    }
+
+    private static List<Integer> extractChannelTypes(Parameter parameter) {
+        ChannelTypes channelTypes = parameter.getAnnotation(ChannelTypes.class);
+        if (channelTypes == null || channelTypes.value().length == 0) {
+            return List.of();
+        }
+        return Arrays.stream(channelTypes.value()).boxed().toList();
+    }
+
+    private static void validateOptionSchema(Parameter reflected,
+                                             ParameterKind kind,
+                                             Class<?> optionType,
+                                             String autocompleteId,
+                                             List<CommandOptionChoice> choices,
+                                             Double minValue,
+                                             Double maxValue,
+                                             Integer minLength,
+                                             Integer maxLength,
+                                             List<Integer> channelTypes) {
+        if (autocompleteId != null && !choices.isEmpty()) {
+            throw new RegistrationException("@Autocomplete cannot be used together with @OptionChoice: " + reflected);
+        }
+        if ((minValue != null || maxValue != null) && !(optionType == int.class || optionType == Integer.class
+                || optionType == long.class || optionType == Long.class || optionType == double.class || optionType == Double.class)) {
+            throw new RegistrationException("@MinValue/@MaxValue are only valid for numeric option parameters: " + reflected);
+        }
+        if ((minLength != null || maxLength != null) && optionType != String.class) {
+            throw new RegistrationException("@MinLength/@MaxLength are only valid for string option parameters: " + reflected);
+        }
+        if (!channelTypes.isEmpty() && kind != ParameterKind.TARGET_CHANNEL) {
+            throw new RegistrationException("@ChannelTypes is only valid for channel target parameters: " + reflected);
+        }
+    }
+
     public CommandDefinition parse(Object instance) {
         Objects.requireNonNull(instance, "instance");
         Class<?> type = instance.getClass();
@@ -231,7 +297,7 @@ public final class CommandParser {
     }
 
     private CommandParameter parseParameter(int index, Parameter parameter) {
-        boolean wrappedOptional = parameter.getType() == Optional.class;
+        boolean wrappedOptional = parameter.getType() == java.util.Optional.class;
         Class<?> optionType = wrappedOptional ? extractOptionalType(parameter) : parameter.getType();
         ParameterKind kind = determineKind(optionType);
         String optionName = extractOptionName(parameter);
@@ -240,11 +306,23 @@ public final class CommandParser {
                 || parameter.isAnnotationPresent(Default.class));
         String defaultValue = parameter.isAnnotationPresent(Default.class) ? parameter.getAnnotation(Default.class).value() : null;
         String autocompleteId = parameter.isAnnotationPresent(Autocomplete.class) ? parameter.getAnnotation(Autocomplete.class).value() : null;
+        List<CommandOptionChoice> choices = extractChoices(parameter);
+        Double minValue = parameter.isAnnotationPresent(MinValue.class) ? parameter.getAnnotation(MinValue.class).value() : null;
+        Double maxValue = parameter.isAnnotationPresent(MaxValue.class) ? parameter.getAnnotation(MaxValue.class).value() : null;
+        Integer minLength = parameter.isAnnotationPresent(MinLength.class) ? parameter.getAnnotation(MinLength.class).value() : null;
+        Integer maxLength = parameter.isAnnotationPresent(MaxLength.class) ? parameter.getAnnotation(MaxLength.class).value() : null;
+        List<Integer> channelTypes = extractChannelTypes(parameter);
+        Map<String, String> nameLocalizations = extractNameLocalizations(parameter);
+        Map<String, String> descriptionLocalizations = extractDescriptionLocalizations(parameter);
 
         if ((kind == ParameterKind.CONTEXT || kind == ParameterKind.RAW_INTERACTION) && !required) {
             throw new RegistrationException("@Optional/@Default are only valid for option parameters: " + parameter);
         }
 
-        return new CommandParameter(index, parameter, optionType, optionName, extractDescription(parameter), kind, required, defaultValue, autocompleteId, wrappedOptional);
+        validateOptionSchema(parameter, kind, optionType, autocompleteId, choices, minValue, maxValue, minLength, maxLength, channelTypes);
+
+        return new CommandParameter(index, parameter, optionType, optionName, extractDescription(parameter), kind, required, defaultValue,
+                autocompleteId, wrappedOptional, choices, minValue, maxValue, minLength, maxLength, channelTypes,
+                nameLocalizations, descriptionLocalizations);
     }
 }
