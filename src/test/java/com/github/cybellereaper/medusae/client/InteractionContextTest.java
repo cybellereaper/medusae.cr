@@ -121,6 +121,33 @@ class InteractionContextTest {
     }
 
     @Test
+    void respondWithUpdatedMessageUsesUpdateCallbackType() throws Exception {
+        JsonNode interaction = MAPPER.readTree("""
+                {
+                  "id": "9",
+                  "token": "xyz",
+                  "type": 3,
+                  "data": {
+                    "custom_id": "confirm_button"
+                  }
+                }
+                """);
+
+        AtomicReference<Integer> responseType = new AtomicReference<>();
+        AtomicReference<Object> content = new AtomicReference<>();
+
+        InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
+            responseType.set(type);
+            content.set(data.get("content"));
+        });
+
+        context.respondWithUpdatedMessage(DiscordMessage.ofContent("updated"));
+
+        assertEquals(7, responseType.get());
+        assertEquals("updated", content.get());
+    }
+
+    @Test
     void prefersMemberUserOverTopLevelUserId() throws Exception {
         JsonNode interaction = MAPPER.readTree("""
                 {

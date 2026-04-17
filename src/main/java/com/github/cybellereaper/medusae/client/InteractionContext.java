@@ -208,6 +208,10 @@ public final class InteractionContext {
         responderFacade.respondWithMessage(message);
     }
 
+    public void respondWithUpdatedMessage(DiscordMessage message) {
+        responderFacade.respondWithUpdatedMessage(message);
+    }
+
     public void respondWithEmbeds(String content, List<DiscordEmbed> embeds) {
         respondWithMessage(DiscordMessage.ofEmbeds(content, embeds));
     }

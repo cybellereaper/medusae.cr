@@ -9,6 +9,7 @@ final class InteractionResponderFacade {
     private static final int RESPONSE_MESSAGE = 4;
     private static final int RESPONSE_DEFER_MESSAGE = 5;
     private static final int RESPONSE_DEFER_UPDATE = 6;
+    private static final int RESPONSE_UPDATE_MESSAGE = 7;
     private static final int RESPONSE_AUTOCOMPLETE = 8;
     private static final int RESPONSE_MODAL = 9;
     private static final int MAX_AUTOCOMPLETE_CHOICES = 25;
@@ -30,6 +31,11 @@ final class InteractionResponderFacade {
     void respondWithMessage(DiscordMessage message) {
         Objects.requireNonNull(message, "message");
         respond(RESPONSE_MESSAGE, message.toPayload());
+    }
+
+    void respondWithUpdatedMessage(DiscordMessage message) {
+        Objects.requireNonNull(message, "message");
+        respond(RESPONSE_UPDATE_MESSAGE, message.toPayload());
     }
 
     void respondWithModal(DiscordModal modal) {

@@ -215,6 +215,11 @@ public final class DiscordClient implements AutoCloseable {
     }
 
     @Deprecated(forRemoval = false, since = "1.1")
+    public void respondWithUpdatedMessage(JsonNode interaction, DiscordMessage message) {
+        slashCommandRouter.respondWithUpdatedMessage(interaction, message);
+    }
+
+    @Deprecated(forRemoval = false, since = "1.1")
     public void respondWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
         slashCommandRouter.respondWithEmbeds(interaction, content, embeds);
     }

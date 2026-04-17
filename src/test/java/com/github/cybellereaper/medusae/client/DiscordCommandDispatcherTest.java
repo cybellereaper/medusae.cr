@@ -62,7 +62,7 @@ class DiscordCommandDispatcherTest {
         dispatcher.dispatchComponent(componentInteractionJson(), context);
 
         assertEquals(1, calls.get());
-        assertEquals(4, responseType.get());
+        assertEquals(7, responseType.get());
         assertEquals("Handled confirm button", data.get().get("content"));
     }
 

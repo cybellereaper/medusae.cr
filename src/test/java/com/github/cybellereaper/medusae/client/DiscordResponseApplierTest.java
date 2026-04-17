@@ -46,7 +46,7 @@ class DiscordResponseApplierTest {
 
         new DiscordResponseApplier(context).accept(response);
 
-        assertEquals(4, responder.type);
+        assertEquals(7, responder.type);
         assertNotNull(responder.data);
         assertEquals("Updated", responder.data.get("content"));
         assertTrue(responder.data.containsKey("components"));
