@@ -7,6 +7,7 @@ Medusae is now a **Crystal-first** Discord interaction toolkit focused on buildi
 - Gateway intent bitmask helpers (`Medusae::Gateway::GatewayIntent`)
 - Discord client configuration model (`Medusae::Client::DiscordClientConfig`)
 - Interaction router (`Medusae::Client::SlashCommandRouter`)
+- REST API helper for Discord callbacks and authenticated requests (`Medusae::Client::DiscordRestApi`)
 - Rich payload builders:
   - messages and embeds
   - buttons and action rows
@@ -87,3 +88,17 @@ bot.handle_interaction(Medusae::Client::Interaction.component("confirm", id: "2"
 ```
 
 See runnable files in [`examples/`](examples).
+
+## Example: REST interaction responder
+
+```crystal
+require "medusae"
+
+config = Medusae::Client::DiscordClientConfig.new(ENV["DISCORD_TOKEN"])
+rest_api = Medusae::Client::DiscordRestApi.new(config)
+
+router = Medusae::Client::SlashCommandRouter.new(rest_api.interaction_responder)
+router.register_slash_handler("ping") do |interaction|
+  router.respond_with_message(interaction, "pong")
+end
+```
