@@ -58,7 +58,6 @@ puts payload.to_json
 ## Example: macro-based command bot
 
 ```crystal
-require "json"
 require "medusae"
 
 class DemoBot
@@ -78,13 +77,13 @@ class DemoBot
 end
 
 bot = DemoBot.new(
-  ->(id : String, token : String, type : Int32, data : Hash(String, JSON::Any)?) {
-    puts "Responding id=#{id} token=#{token} type=#{type} data=#{data}"
+  ->(response : Medusae::Client::InteractionResponse) {
+    puts "Responding id=#{response.id} token=#{response.token} type=#{response.type.value} data=#{response.data}"
   }
 )
 
-bot.handle_interaction(JSON.parse(%({"id":"1","token":"abc","type":2,"data":{"name":"ping"}})))
-bot.handle_interaction(JSON.parse(%({"id":"2","token":"def","type":3,"data":{"custom_id":"confirm"}})))
+bot.handle_interaction(Medusae::Client::Interaction.slash_command("ping", id: "1", token: "abc"))
+bot.handle_interaction(Medusae::Client::Interaction.component("confirm", id: "2", token: "def"))
 ```
 
 See runnable files in [`examples/`](examples).

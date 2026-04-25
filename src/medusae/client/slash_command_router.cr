@@ -1,75 +1,8 @@
 module Medusae
   module Client
     class SlashCommandRouter
-      alias InteractionResponder = Proc(String, String, Int32, Hash(String, JSON::Any)?, Nil)
-      alias ContextHandler = Proc(JSON::Any, Nil)
-
-      enum InteractionType
-        Ping
-        ApplicationCommand
-        MessageComponent
-        ApplicationCommandAutocomplete
-        ModalSubmit
-        Unknown
-
-        def self.from_code(code : Int32) : self
-          case code
-          when 1 then Ping
-          when 2 then ApplicationCommand
-          when 3 then MessageComponent
-          when 4 then ApplicationCommandAutocomplete
-          when 5 then ModalSubmit
-          else        Unknown
-          end
-        end
-      end
-
-      enum CommandType
-        ChatInput
-        UserContext
-        MessageContext
-        Unknown
-
-        def self.from_code(code : Int32) : self
-          case code
-          when 1 then ChatInput
-          when 2 then UserContext
-          when 3 then MessageContext
-          else        Unknown
-          end
-        end
-      end
-
-      enum ResponseType
-        Pong
-        ChannelMessage
-        DeferredChannelMessage
-        DeferredMessageUpdate
-        UpdateMessage
-        Autocomplete
-        Modal
-
-        def code : Int32
-          case self
-          when Pong
-            1
-          when ChannelMessage
-            4
-          when DeferredChannelMessage
-            5
-          when DeferredMessageUpdate
-            6
-          when UpdateMessage
-            7
-          when Autocomplete
-            8
-          when Modal
-            9
-          else
-            raise "unreachable"
-          end
-        end
-      end
+      alias InteractionResponder = Proc(InteractionResponse, Nil)
+      alias ContextHandler = Proc(Interaction, Nil)
 
       @slash_handlers = {} of String => ContextHandler
       @user_context_handlers = {} of String => ContextHandler
@@ -115,32 +48,28 @@ module Medusae
         register_unique_handler(@autocomplete_handlers, command_name, "autocomplete", handler)
       end
 
-      def handle_interaction(interaction : JSON::Any?) : Nil
+      def handle_interaction(interaction : Interaction?) : Nil
         return if interaction.nil?
 
-        interaction_type = InteractionType.from_code(int_field(interaction, "type"))
-
-        case interaction_type
-        when InteractionType::Ping
+        case interaction.type
+        when .ping?
           respond(interaction, ResponseType::Pong, nil)
-        when InteractionType::ApplicationCommand
+        when .application_command?
           handle_application_command(interaction)
-        when InteractionType::ApplicationCommandAutocomplete
-          dispatch_by_data_field(interaction, @autocomplete_handlers, "name")
-        when InteractionType::MessageComponent
-          dispatch_by_data_field(interaction, @component_handlers, "custom_id", @global_component_handlers)
-        when InteractionType::ModalSubmit
-          dispatch_by_data_field(interaction, @modal_handlers, "custom_id", @global_modal_handlers)
-        when InteractionType::Unknown
-          # Intentionally ignored.
+        when .application_command_autocomplete?
+          dispatch(interaction, @autocomplete_handlers, global_handlers: [] of ContextHandler) { |data| data.name }
+        when .message_component?
+          dispatch(interaction, @component_handlers, global_handlers: @global_component_handlers) { |data| data.custom_id }
+        when .modal_submit?
+          dispatch(interaction, @modal_handlers, global_handlers: @global_modal_handlers) { |data| data.custom_id }
         end
       end
 
-      def respond_with_message(interaction : JSON::Any, content : String) : Nil
-        respond(interaction, ResponseType::ChannelMessage, json_hash({"content" => JSON::Any.new(content)}))
+      def respond_with_message(interaction : Interaction, content : String) : Nil
+        respond(interaction, ResponseType::ChannelMessage, InteractionResponseData.message(content))
       end
 
-      def defer_message(interaction : JSON::Any) : Nil
+      def defer_message(interaction : Interaction) : Nil
         respond(interaction, ResponseType::DeferredChannelMessage, nil)
       end
 
@@ -158,19 +87,18 @@ module Medusae
         normalized
       end
 
-      private def handle_application_command(interaction : JSON::Any) : Nil
-        command_code = interaction.dig?("data", "type").try(&.as_i?) || 1
-        command_type = CommandType.from_code(command_code)
-        dispatch_by_data_field(interaction, handlers_for(command_type), "name")
+      private def handle_application_command(interaction : Interaction) : Nil
+        command_type = interaction.data.try(&.type) || CommandType::ChatInput
+        dispatch(interaction, handlers_for(command_type), global_handlers: [] of ContextHandler) { |data| data.name }
       end
 
-      private def dispatch_by_data_field(
-        interaction : JSON::Any,
+      private def dispatch(
+        interaction : Interaction,
         handlers : Hash(String, ContextHandler),
-        data_field : String,
-        global_handlers : Array(ContextHandler) = [] of ContextHandler,
+        global_handlers : Array(ContextHandler),
+        &key_extractor : InteractionData -> (String | Nil)
       ) : Nil
-        if handler = handler_for(interaction, handlers, data_field)
+        if handler = handler_for(interaction, handlers, &key_extractor)
           handler.call(interaction)
           return
         end
@@ -178,19 +106,20 @@ module Medusae
         global_handlers.each { |handler| handler.call(interaction) }
       end
 
-      private def respond(interaction : JSON::Any, response_type : ResponseType, data : Hash(String, JSON::Any)?) : Nil
-        interaction_id = non_blank_string(interaction, "id")
-        interaction_token = non_blank_string(interaction, "token")
+      private def respond(interaction : Interaction, response_type : ResponseType, data : InteractionResponseData?) : Nil
+        interaction_id = non_blank_string(interaction.id)
+        interaction_token = non_blank_string(interaction.token)
 
         if interaction_id.nil? || interaction_token.nil?
           raise ArgumentError.new("interaction must include id and token")
         end
 
-        @responder.call(interaction_id, interaction_token, response_type.code, data)
-      end
-
-      private def int_field(interaction : JSON::Any, field : String) : Int32
-        interaction[field]?.try(&.as_i?) || 0
+        @responder.call(InteractionResponse.new(
+          id: interaction_id,
+          token: interaction_token,
+          type: response_type,
+          data: data,
+        ))
       end
 
       private def handlers_for(command_type : CommandType) : Hash(String, ContextHandler)
@@ -202,26 +131,21 @@ module Medusae
       end
 
       private def handler_for(
-        interaction : JSON::Any,
+        interaction : Interaction,
         handlers : Hash(String, ContextHandler),
-        data_field : String,
+        &key_extractor : InteractionData -> (String | Nil)
       ) : ContextHandler?
-        key = interaction.dig?("data", data_field).try(&.as_s?)
+        key = interaction.data.try { |data| key_extractor.call(data) }
         return nil unless key
 
         handlers[key.strip]?
       end
 
-      private def non_blank_string(interaction : JSON::Any, field : String) : String?
-        value = interaction[field]?.try(&.as_s?)
+      private def non_blank_string(value : String?) : String?
         return nil unless value
 
         return nil if value.strip.empty?
         value
-      end
-
-      private def json_hash(named_values : Hash(String, JSON::Any)) : Hash(String, JSON::Any)
-        named_values
       end
     end
   end
