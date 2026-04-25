@@ -1,4 +1,3 @@
-require "json"
 require "../src/medusae"
 
 class DemoBot
@@ -19,11 +18,26 @@ class DemoBot
 end
 
 bot = DemoBot.new(
-  ->(id : String, token : String, type : Int32, data : Hash(String, JSON::Any)?) {
-    puts "Responding id=#{id} token=#{token} type=#{type} data=#{data}"
+  ->(response : Medusae::Client::InteractionResponse) {
+    puts "Responding id=#{response.id} token=#{response.token} type=#{response.type.value} data=#{response.data}"
   }
 )
 
-bot.handle_interaction(JSON.parse(%({"id":"1","token":"abc","type":2,"data":{"name":"ping"}})))
-bot.handle_interaction(JSON.parse(%({"id":"2","token":"def","type":3,"data":{"custom_id":"confirm"}})))
-bot.handle_interaction(JSON.parse(%({"id":"3","token":"ghi","type":3,"data":{"custom_id":"unknown"}})))
+bot.handle_interaction(Medusae::Client::Interaction.new(
+  id: "1",
+  token: "abc",
+  type: Medusae::Client::InteractionType::ApplicationCommand,
+  data: Medusae::Client::InteractionData.new(name: "ping"),
+))
+bot.handle_interaction(Medusae::Client::Interaction.new(
+  id: "2",
+  token: "def",
+  type: Medusae::Client::InteractionType::MessageComponent,
+  data: Medusae::Client::InteractionData.new(custom_id: "confirm"),
+))
+bot.handle_interaction(Medusae::Client::Interaction.new(
+  id: "3",
+  token: "ghi",
+  type: Medusae::Client::InteractionType::MessageComponent,
+  data: Medusae::Client::InteractionData.new(custom_id: "unknown"),
+))

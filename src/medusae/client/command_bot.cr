@@ -13,15 +13,15 @@ module Medusae
         protected def after_initialize : Nil
         end
 
-        def handle_interaction(interaction : JSON::Any?) : Nil
+        def handle_interaction(interaction : Medusae::Client::Interaction?) : Nil
           @router.handle_interaction(interaction)
         end
 
-        protected def respond_with_message(interaction : JSON::Any, content : String) : Nil
+        protected def respond_with_message(interaction : Medusae::Client::Interaction, content : String) : Nil
           @router.respond_with_message(interaction, content)
         end
 
-        protected def defer_message(interaction : JSON::Any) : Nil
+        protected def defer_message(interaction : Medusae::Client::Interaction) : Nil
           @router.defer_message(interaction)
         end
 
@@ -36,9 +36,9 @@ module Medusae
       macro slash_command(name, &block)
         {% method_name = "__medusae_slash_#{block.body.line_number}".id %}
 
-        private def {{method_name}}(interaction : JSON::Any) : Nil
+        private def {{method_name}}(interaction : Medusae::Client::Interaction) : Nil
           {% if block.args.size > 0 %}
-            ->({{block.args[0]}} : JSON::Any) { {{block.body}} }.call(interaction)
+            ->({{block.args[0]}} : Medusae::Client::Interaction) { {{block.body}} }.call(interaction)
           {% else %}
             {{block.body}}
           {% end %}
@@ -55,9 +55,9 @@ module Medusae
       macro user_context_command(name, &block)
         {% method_name = "__medusae_user_context_#{block.body.line_number}".id %}
 
-        private def {{method_name}}(interaction : JSON::Any) : Nil
+        private def {{method_name}}(interaction : Medusae::Client::Interaction) : Nil
           {% if block.args.size > 0 %}
-            ->({{block.args[0]}} : JSON::Any) { {{block.body}} }.call(interaction)
+            ->({{block.args[0]}} : Medusae::Client::Interaction) { {{block.body}} }.call(interaction)
           {% else %}
             {{block.body}}
           {% end %}
@@ -74,9 +74,9 @@ module Medusae
       macro message_context_command(name, &block)
         {% method_name = "__medusae_message_context_#{block.body.line_number}".id %}
 
-        private def {{method_name}}(interaction : JSON::Any) : Nil
+        private def {{method_name}}(interaction : Medusae::Client::Interaction) : Nil
           {% if block.args.size > 0 %}
-            ->({{block.args[0]}} : JSON::Any) { {{block.body}} }.call(interaction)
+            ->({{block.args[0]}} : Medusae::Client::Interaction) { {{block.body}} }.call(interaction)
           {% else %}
             {{block.body}}
           {% end %}
@@ -93,9 +93,9 @@ module Medusae
       macro component(custom_id, &block)
         {% method_name = "__medusae_component_#{block.body.line_number}".id %}
 
-        private def {{method_name}}(interaction : JSON::Any) : Nil
+        private def {{method_name}}(interaction : Medusae::Client::Interaction) : Nil
           {% if block.args.size > 0 %}
-            ->({{block.args[0]}} : JSON::Any) { {{block.body}} }.call(interaction)
+            ->({{block.args[0]}} : Medusae::Client::Interaction) { {{block.body}} }.call(interaction)
           {% else %}
             {{block.body}}
           {% end %}
@@ -112,9 +112,9 @@ module Medusae
       macro modal(custom_id, &block)
         {% method_name = "__medusae_modal_#{block.body.line_number}".id %}
 
-        private def {{method_name}}(interaction : JSON::Any) : Nil
+        private def {{method_name}}(interaction : Medusae::Client::Interaction) : Nil
           {% if block.args.size > 0 %}
-            ->({{block.args[0]}} : JSON::Any) { {{block.body}} }.call(interaction)
+            ->({{block.args[0]}} : Medusae::Client::Interaction) { {{block.body}} }.call(interaction)
           {% else %}
             {{block.body}}
           {% end %}
@@ -131,9 +131,9 @@ module Medusae
       macro autocomplete(name, &block)
         {% method_name = "__medusae_autocomplete_#{block.body.line_number}".id %}
 
-        private def {{method_name}}(interaction : JSON::Any) : Nil
+        private def {{method_name}}(interaction : Medusae::Client::Interaction) : Nil
           {% if block.args.size > 0 %}
-            ->({{block.args[0]}} : JSON::Any) { {{block.body}} }.call(interaction)
+            ->({{block.args[0]}} : Medusae::Client::Interaction) { {{block.body}} }.call(interaction)
           {% else %}
             {{block.body}}
           {% end %}
@@ -150,9 +150,9 @@ module Medusae
       macro global_component(&block)
         {% method_name = "__medusae_global_component_#{block.body.line_number}".id %}
 
-        private def {{method_name}}(interaction : JSON::Any) : Nil
+        private def {{method_name}}(interaction : Medusae::Client::Interaction) : Nil
           {% if block.args.size > 0 %}
-            ->({{block.args[0]}} : JSON::Any) { {{block.body}} }.call(interaction)
+            ->({{block.args[0]}} : Medusae::Client::Interaction) { {{block.body}} }.call(interaction)
           {% else %}
             {{block.body}}
           {% end %}
@@ -169,9 +169,9 @@ module Medusae
       macro global_modal(&block)
         {% method_name = "__medusae_global_modal_#{block.body.line_number}".id %}
 
-        private def {{method_name}}(interaction : JSON::Any) : Nil
+        private def {{method_name}}(interaction : Medusae::Client::Interaction) : Nil
           {% if block.args.size > 0 %}
-            ->({{block.args[0]}} : JSON::Any) { {{block.body}} }.call(interaction)
+            ->({{block.args[0]}} : Medusae::Client::Interaction) { {{block.body}} }.call(interaction)
           {% else %}
             {{block.body}}
           {% end %}
