@@ -1,20 +1,11 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record ResolvedRole(
         String id,
         String name,
         int color
 ) {
-    public static ResolvedRole from(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        return new ResolvedRole(
-                node.path("id").asText(null),
-                node.path("name").asText(null),
-                node.path("color").asInt(0)
-        );
-    }
 }

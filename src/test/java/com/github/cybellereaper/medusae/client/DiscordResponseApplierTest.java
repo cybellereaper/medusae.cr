@@ -1,6 +1,7 @@
 package com.github.cybellereaper.medusae.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import com.github.cybellereaper.medusae.commands.core.response.FollowupResponse;
 import com.github.cybellereaper.medusae.commands.core.response.InteractionReply;
 import com.github.cybellereaper.medusae.commands.core.response.ModalReply;
@@ -105,7 +106,7 @@ class DiscordResponseApplierTest {
     }
 
     private static InteractionContext context(CapturingResponder responder) {
-        return InteractionContext.from(OBJECT_MAPPER.valueToTree(Map.of("id", "123", "token", "abc")), responder);
+        return InteractionContext.from(OBJECT_MAPPER.convertValue(Map.of("id", "123", "token", "abc"), DiscordInteractionPayload.class), responder);
     }
 
     private static final class CapturingResponder implements SlashCommandRouter.InteractionResponder {

@@ -1,8 +1,6 @@
 package com.github.cybellereaper.medusae.gateway;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.cybellereaper.medusae.client.DiscordClientConfig;
 import com.github.cybellereaper.medusae.http.DiscordRestClient;
 
@@ -31,7 +29,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     private final ExecutorService listenerExecutor;
     private final ScheduledExecutorService scheduler;
 
-    private final Map<String, CopyOnWriteArrayList<Consumer<JsonNode>>> listeners = new ConcurrentHashMap<>();
+    private final Map<String, CopyOnWriteArrayList<Consumer<Map<String, Object>>>> listeners = new ConcurrentHashMap<>();
     private final Map<String, CopyOnWriteArrayList<TypedEventListener<?>>> typedListeners = new ConcurrentHashMap<>();
 
     private final Object textBufferLock = new Object();
@@ -103,7 +101,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         this.webSocket = connect(gatewayUri);
     }
 
-    public void on(String eventName, Consumer<JsonNode> listener) {
+    public void on(String eventName, Consumer<Map<String, Object>> listener) {
         listeners
                 .computeIfAbsent(requireNonBlank(eventName, "eventName"), ignored -> new CopyOnWriteArrayList<>())
                 .add(Objects.requireNonNull(listener, "listener"));
@@ -126,8 +124,8 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
                 .add(new TypedEventListener<>(eventType, deserializer, listener));
     }
 
-    public boolean off(String eventName, Consumer<JsonNode> listener) {
-        CopyOnWriteArrayList<Consumer<JsonNode>> eventListeners = listeners.get(requireNonBlank(eventName, "eventName"));
+    public boolean off(String eventName, Consumer<Map<String, Object>> listener) {
+        CopyOnWriteArrayList<Consumer<Map<String, Object>>> eventListeners = listeners.get(requireNonBlank(eventName, "eventName"));
         return eventListeners != null && eventListeners.remove(listener);
     }
 
@@ -183,7 +181,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
         if (payloadText != null) {
             try {
-                handlePayload(webSocket, readJson(payloadText));
+                handlePayload(webSocket, readJson(payloadText, GatewayPayload.class));
             } catch (GatewayClientException exception) {
                 LOGGER.log(System.Logger.Level.WARNING, "Failed to handle gateway payload: " + exception.getMessage(), exception);
                 requestReconnect("payload handling failure");
@@ -214,30 +212,30 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         }
     }
 
-    private void handlePayload(WebSocket socket, JsonNode payload) {
+    private void handlePayload(WebSocket socket, GatewayPayload payload) {
         LOGGER.log(System.Logger.Level.DEBUG, "GW <= {0}", payload);
 
-        int op = payload.path("op").asInt();
-        JsonNode d = payload.path("d");
-        JsonNode sequenceNode = payload.path("s");
+        int op = payload.op();
+        Object d = payload.d();
+        Long sequenceValue = payload.s();
 
-        if (!sequenceNode.isMissingNode() && !sequenceNode.isNull()) {
-            sequence = sequenceNode.asLong();
+        if (sequenceValue != null) {
+            sequence = sequenceValue;
         }
 
         switch (op) {
-            case 0 -> handleDispatch(payload.path("t").asText(), d);
+            case 0 -> handleDispatch(payload.t(), castObjectPayload(d));
             case 1 -> sendHeartbeat(socket);
             case 7 -> requestReconnect("reconnect requested by Discord gateway");
             case 9 -> {
-                resumeOnReconnect = d.asBoolean(false);
+                resumeOnReconnect = d instanceof Boolean value && value;
                 if (!resumeOnReconnect) {
                     clearResumableSessionState();
                 }
                 requestReconnect("invalid session");
             }
             case 10 -> {
-                long intervalMillis = d.path("heartbeat_interval").asLong(-1);
+                long intervalMillis = heartbeatInterval(d);
                 if (intervalMillis <= 0) {
                     throw new GatewayProtocolException("Missing or invalid heartbeat interval in HELLO payload");
                 }
@@ -254,11 +252,23 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         }
     }
 
-    private void handleDispatch(String eventType, JsonNode data) {
-        if ("READY".equals(eventType)) {
-            sessionId = data.path("session_id").asText(null);
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> castObjectPayload(Object payload) {
+        return payload instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.of();
+    }
 
-            String resumeGatewayUrl = data.path("resume_gateway_url").asText(null);
+    private long heartbeatInterval(Object payload) {
+        if (payload instanceof Map<?, ?> map && map.get("heartbeat_interval") instanceof Number number) {
+            return number.longValue();
+        }
+        return -1L;
+    }
+
+    private void handleDispatch(String eventType, Map<String, Object> data) {
+        if ("READY".equals(eventType)) {
+            sessionId = stringValue(data.get("session_id"));
+
+            String resumeGatewayUrl = stringValue(data.get("resume_gateway_url"));
             if (resumeGatewayUrl != null && !resumeGatewayUrl.isBlank()) {
                 resumeGatewayUri = buildGatewayUri(resumeGatewayUrl);
             }
@@ -266,9 +276,9 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
             resumeOnReconnect = true;
         }
 
-        List<Consumer<JsonNode>> eventListeners = listeners.get(eventType);
+        List<Consumer<Map<String, Object>>> eventListeners = listeners.get(eventType);
         if (eventListeners != null) {
-            for (Consumer<JsonNode> listener : eventListeners) {
+            for (Consumer<Map<String, Object>> listener : eventListeners) {
                 dispatchAsync(() -> listener.accept(data));
             }
         }
@@ -280,6 +290,10 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
                 dispatchAsync(() -> typedListener.accept(data, typedEventCache, objectMapper));
             }
         }
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : value.toString();
     }
 
     private void dispatchAsync(Runnable task) {
@@ -373,50 +387,32 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
     }
 
     private void sendIdentify(WebSocket socket) {
-        ObjectNode properties = objectMapper.createObjectNode()
-                .put("os", System.getProperty("os.name"))
-                .put("browser", "discord25")
-                .put("device", "discord25");
-
-        ObjectNode data = objectMapper.createObjectNode()
-                .put("token", config.botToken())
-                .put("intents", config.intents())
-                .set("properties", properties);
-
-        if (config.shardCount() > 1) {
-            data.putArray("shard")
-                    .add(config.shardId())
-                    .add(config.shardCount());
-        }
-
-        send(socket, 2, data);
+        List<Integer> shard = config.shardCount() > 1 ? List.of(config.shardId(), config.shardCount()) : null;
+        GatewayIdentifyPayload payload = new GatewayIdentifyPayload(
+                config.botToken(),
+                config.intents(),
+                new GatewayIdentifyPayload.GatewayProperties(System.getProperty("os.name"), "discord25", "discord25"),
+                shard
+        );
+        send(socket, 2, payload);
     }
 
     private void sendResume(WebSocket socket) {
-        ObjectNode data = objectMapper.createObjectNode()
-                .put("token", config.botToken())
-                .put("session_id", sessionId)
-                .put("seq", sequence);
-
-        send(socket, 6, data);
+        send(socket, 6, new GatewayResumePayload(config.botToken(), sessionId, sequence));
     }
 
     private void sendHeartbeat(WebSocket socket) {
         heartbeatAcked = false;
 
         if (sequence >= 0) {
-            send(socket, 1, objectMapper.getNodeFactory().numberNode(sequence));
+            send(socket, 1, sequence);
         } else {
-            send(socket, 1, objectMapper.nullNode());
+            send(socket, 1, null);
         }
     }
 
-    private void send(WebSocket socket, int op, JsonNode d) {
-        ObjectNode payload = objectMapper.createObjectNode()
-                .put("op", op)
-                .set("d", d);
-
-        String json = writeJson(payload);
+    private void send(WebSocket socket, int op, Object d) {
+        String json = writeJson(new GatewayPayload(op, d, null, null));
         socket.sendText(json, true)
                 .exceptionally(throwable -> {
                     LOGGER.log(System.Logger.Level.WARNING, "Failed to send gateway payload op={0}: {1}", op, throwable.getMessage());
@@ -425,15 +421,15 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
                 });
     }
 
-    private JsonNode readJson(String json) {
+    private <T> T readJson(String json, Class<T> type) {
         try {
-            return objectMapper.readTree(json);
+            return objectMapper.readValue(json, type);
         } catch (IOException exception) {
             throw new GatewaySerializationException("Failed to parse gateway payload", exception);
         }
     }
 
-    private String writeJson(JsonNode value) {
+    private String writeJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (IOException exception) {
@@ -486,7 +482,7 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
 
     @FunctionalInterface
     public interface EventDeserializer<T> {
-        T deserialize(JsonNode rawEvent, ObjectMapper objectMapper);
+        T deserialize(Map<String, Object> rawEvent, ObjectMapper objectMapper);
     }
 
     private record TypedEventKey(Class<?> eventType, Object deserializerKey) {
@@ -521,14 +517,14 @@ public final class DiscordGatewayClient implements WebSocket.Listener, AutoClose
         }
 
         @SuppressWarnings("unchecked")
-        private void accept(JsonNode rawEvent, Map<TypedEventKey, Object> eventCache, ObjectMapper objectMapper) {
+        private void accept(Map<String, Object> rawEvent, Map<TypedEventKey, Object> eventCache, ObjectMapper objectMapper) {
             Object deserializerKey = customDeserializer ? deserializer : DEFAULT_DESERIALIZER_KEY;
             TypedEventKey cacheKey = new TypedEventKey(eventType, deserializerKey);
             Object typedEvent = eventCache.computeIfAbsent(cacheKey, ignored -> deserialize(rawEvent, objectMapper));
             listener.accept((T) typedEvent);
         }
 
-        private T deserialize(JsonNode rawEvent, ObjectMapper objectMapper) {
+        private T deserialize(Map<String, Object> rawEvent, ObjectMapper objectMapper) {
             try {
                 return deserializer.deserialize(rawEvent, objectMapper);
             } catch (IllegalArgumentException exception) {

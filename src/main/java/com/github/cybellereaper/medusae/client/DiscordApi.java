@@ -1,6 +1,6 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.github.cybellereaper.medusae.http.DiscordApplication;
 import com.github.cybellereaper.medusae.http.DiscordRestClient;
 
 import java.util.*;
@@ -22,11 +22,7 @@ public final class DiscordApi {
         this.stateCache = stateCache;
     }
 
-    private static Optional<JsonNode> cache(Supplier<Optional<JsonNode>> accessor) {
-        return accessor.get().map(JsonNode::deepCopy);
-    }
-
-    private static JsonNode getOrLoad(Optional<JsonNode> cached, Supplier<JsonNode> loader) {
+    private static <T> T getOrLoad(Optional<T> cached, Supplier<T> loader) {
         return cached.orElseGet(loader);
     }
 
@@ -37,20 +33,20 @@ public final class DiscordApi {
         }
     }
 
-    public JsonNode getCurrentApplication() {
+    public DiscordApplication getCurrentApplication() {
         return restClient.getCurrentApplication();
     }
 
-    public JsonNode getCurrentUser() {
+    public Map<String, Object> getCurrentUser() {
         return restClient.request("GET", "/users/@me", null);
     }
 
-    public JsonNode getChannel(String channelId) {
+    public ChannelSnapshot getChannel(String channelId) {
         requireNonBlank(channelId, "channelId");
         return getOrLoad(
-                cache(() -> stateCache == null ? Optional.empty() : stateCache.getChannel(channelId)),
+                stateCache == null ? Optional.empty() : stateCache.getChannel(channelId),
                 () -> {
-                    JsonNode channel = restClient.request("GET", "/channels/" + channelId, null);
+                    ChannelSnapshot channel = restClient.getChannel(channelId);
                     if (stateCache != null) {
                         stateCache.putChannel(channel);
                     }
@@ -59,12 +55,12 @@ public final class DiscordApi {
         );
     }
 
-    public JsonNode getGuild(String guildId) {
+    public GuildSnapshot getGuild(String guildId) {
         requireNonBlank(guildId, "guildId");
         return getOrLoad(
-                cache(() -> stateCache == null ? Optional.empty() : stateCache.getGuild(guildId)),
+                stateCache == null ? Optional.empty() : stateCache.getGuild(guildId),
                 () -> {
-                    JsonNode guild = restClient.request("GET", "/guilds/" + guildId, null);
+                    GuildSnapshot guild = restClient.getGuild(guildId);
                     if (stateCache != null) {
                         stateCache.putGuild(guild);
                     }
@@ -73,63 +69,63 @@ public final class DiscordApi {
         );
     }
 
-    public JsonNode deleteMessage(String channelId, String messageId) {
+    public Map<String, Object> deleteMessage(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return restClient.request("DELETE", "/channels/" + channelId + "/messages/" + messageId, null);
     }
 
-    public JsonNode getMessage(String channelId, String messageId) {
+    public Map<String, Object> getMessage(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return restClient.getMessage(channelId, messageId);
     }
 
-    public JsonNode editMessage(String channelId, String messageId, DiscordMessage message) {
+    public Map<String, Object> editMessage(String channelId, String messageId, DiscordMessage message) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         Objects.requireNonNull(message, "message");
         return restClient.editMessage(channelId, messageId, message.toPayload());
     }
 
-    public JsonNode getChannelMessages(String channelId) {
+    public List<Map<String, Object>> getChannelMessages(String channelId) {
         requireNonBlank(channelId, "channelId");
         return restClient.getChannelMessages(channelId, Map.of());
     }
 
-    public JsonNode getChannelMessages(String channelId, Map<String, Object> query) {
+    public List<Map<String, Object>> getChannelMessages(String channelId, Map<String, Object> query) {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(query, "query");
         return restClient.getChannelMessages(channelId, query);
     }
 
-    public JsonNode sendMessage(String channelId, DiscordMessage message) {
+    public Map<String, Object> sendMessage(String channelId, DiscordMessage message) {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(message, "message");
         return restClient.sendMessage(channelId, message.toPayload());
     }
 
-    public JsonNode sendMessageWithAttachments(String channelId, DiscordMessage message, List<DiscordAttachment> attachments) {
+    public Map<String, Object> sendMessageWithAttachments(String channelId, DiscordMessage message, List<DiscordAttachment> attachments) {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(message, "message");
         return restClient.sendMessageWithAttachments(channelId, message.toPayload(), attachments);
     }
 
-    public JsonNode addReaction(String channelId, String messageId, String emoji) {
+    public Map<String, Object> addReaction(String channelId, String messageId, String emoji) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         requireNonBlank(emoji, "emoji");
         return restClient.addReaction(channelId, messageId, emoji);
     }
 
-    public JsonNode removeOwnReaction(String channelId, String messageId, String emoji) {
+    public Map<String, Object> removeOwnReaction(String channelId, String messageId, String emoji) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         requireNonBlank(emoji, "emoji");
         return restClient.removeOwnReaction(channelId, messageId, emoji);
     }
 
-    public JsonNode removeUserReaction(String channelId, String messageId, String emoji, String userId) {
+    public Map<String, Object> removeUserReaction(String channelId, String messageId, String emoji, String userId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         requireNonBlank(emoji, "emoji");
@@ -137,48 +133,48 @@ public final class DiscordApi {
         return restClient.removeUserReaction(channelId, messageId, emoji, userId);
     }
 
-    public JsonNode clearMessageReactionEmoji(String channelId, String messageId, String emoji) {
+    public Map<String, Object> clearMessageReactionEmoji(String channelId, String messageId, String emoji) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         requireNonBlank(emoji, "emoji");
         return restClient.clearMessageReactionEmoji(channelId, messageId, emoji);
     }
 
-    public JsonNode clearMessageReactions(String channelId, String messageId) {
+    public Map<String, Object> clearMessageReactions(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return restClient.clearMessageReactions(channelId, messageId);
     }
 
-    public JsonNode pinMessage(String channelId, String messageId) {
+    public Map<String, Object> pinMessage(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return restClient.pinMessage(channelId, messageId);
     }
 
-    public JsonNode unpinMessage(String channelId, String messageId) {
+    public Map<String, Object> unpinMessage(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return restClient.unpinMessage(channelId, messageId);
     }
 
-    public JsonNode listPinnedMessages(String channelId) {
+    public List<Map<String, Object>> listPinnedMessages(String channelId) {
         requireNonBlank(channelId, "channelId");
         return restClient.listPinnedMessages(channelId);
     }
 
-    public JsonNode triggerTypingIndicator(String channelId) {
+    public Map<String, Object> triggerTypingIndicator(String channelId) {
         requireNonBlank(channelId, "channelId");
         return restClient.triggerTypingIndicator(channelId);
     }
 
     // Roles
-    public JsonNode listGuildRoles(String guildId) {
+    public List<Map<String, Object>> listGuildRoles(String guildId) {
         requireNonBlank(guildId, "guildId");
         return getOrLoad(
-                cache(() -> stateCache == null ? Optional.empty() : stateCache.getGuildRoles(guildId)),
+                stateCache == null ? Optional.empty() : stateCache.getGuildRoles(guildId),
                 () -> {
-                    JsonNode roles = restClient.request("GET", "/guilds/" + guildId + "/roles", null);
+                    List<Map<String, Object>> roles = restClient.requestList("GET", "/guilds/" + guildId + "/roles", null);
                     if (stateCache != null) {
                         stateCache.putGuildRoles(guildId, roles);
                     }
@@ -187,29 +183,29 @@ public final class DiscordApi {
         );
     }
 
-    public JsonNode createGuildRole(String guildId, Map<String, Object> payload) {
+    public Map<String, Object> createGuildRole(String guildId, Map<String, Object> payload) {
         requireNonBlank(guildId, "guildId");
         Objects.requireNonNull(payload, "payload");
-        JsonNode result = restClient.request("POST", "/guilds/" + guildId + "/roles", payload);
+        Map<String, Object> result = restClient.request("POST", "/guilds/" + guildId + "/roles", payload);
         invalidateGuildScopedCaches(guildId);
         return result;
     }
 
-    public JsonNode modifyGuildRole(String guildId, String roleId, Map<String, Object> payload) {
+    public Map<String, Object> modifyGuildRole(String guildId, String roleId, Map<String, Object> payload) {
         requireNonBlank(guildId, "guildId");
         requireNonBlank(roleId, "roleId");
         Objects.requireNonNull(payload, "payload");
-        JsonNode result = restClient.request("PATCH", "/guilds/" + guildId + "/roles/" + roleId, payload);
+        Map<String, Object> result = restClient.request("PATCH", "/guilds/" + guildId + "/roles/" + roleId, payload);
         if (stateCache != null) {
             stateCache.invalidateGuildRoles(guildId);
         }
         return result;
     }
 
-    public JsonNode deleteGuildRole(String guildId, String roleId) {
+    public Map<String, Object> deleteGuildRole(String guildId, String roleId) {
         requireNonBlank(guildId, "guildId");
         requireNonBlank(roleId, "roleId");
-        JsonNode result = restClient.request("DELETE", "/guilds/" + guildId + "/roles/" + roleId, null);
+        Map<String, Object> result = restClient.request("DELETE", "/guilds/" + guildId + "/roles/" + roleId, null);
         if (stateCache != null) {
             stateCache.invalidateGuildRoles(guildId);
         }
@@ -217,12 +213,12 @@ public final class DiscordApi {
     }
 
     // Emojis
-    public JsonNode listGuildEmojis(String guildId) {
+    public List<Map<String, Object>> listGuildEmojis(String guildId) {
         requireNonBlank(guildId, "guildId");
         return getOrLoad(
-                cache(() -> stateCache == null ? Optional.empty() : stateCache.getGuildEmojis(guildId)),
+                stateCache == null ? Optional.empty() : stateCache.getGuildEmojis(guildId),
                 () -> {
-                    JsonNode emojis = restClient.request("GET", "/guilds/" + guildId + "/emojis", null);
+                    List<Map<String, Object>> emojis = restClient.requestList("GET", "/guilds/" + guildId + "/emojis", null);
                     if (stateCache != null) {
                         stateCache.putGuildEmojis(guildId, emojis);
                     }
@@ -231,31 +227,31 @@ public final class DiscordApi {
         );
     }
 
-    public JsonNode createGuildEmoji(String guildId, Map<String, Object> payload) {
+    public Map<String, Object> createGuildEmoji(String guildId, Map<String, Object> payload) {
         requireNonBlank(guildId, "guildId");
         Objects.requireNonNull(payload, "payload");
-        JsonNode result = restClient.request("POST", "/guilds/" + guildId + "/emojis", payload);
+        Map<String, Object> result = restClient.request("POST", "/guilds/" + guildId + "/emojis", payload);
         if (stateCache != null) {
             stateCache.invalidateGuildEmojis(guildId);
         }
         return result;
     }
 
-    public JsonNode modifyGuildEmoji(String guildId, String emojiId, Map<String, Object> payload) {
+    public Map<String, Object> modifyGuildEmoji(String guildId, String emojiId, Map<String, Object> payload) {
         requireNonBlank(guildId, "guildId");
         requireNonBlank(emojiId, "emojiId");
         Objects.requireNonNull(payload, "payload");
-        JsonNode result = restClient.request("PATCH", "/guilds/" + guildId + "/emojis/" + emojiId, payload);
+        Map<String, Object> result = restClient.request("PATCH", "/guilds/" + guildId + "/emojis/" + emojiId, payload);
         if (stateCache != null) {
             stateCache.invalidateGuildEmojis(guildId);
         }
         return result;
     }
 
-    public JsonNode deleteGuildEmoji(String guildId, String emojiId) {
+    public Map<String, Object> deleteGuildEmoji(String guildId, String emojiId) {
         requireNonBlank(guildId, "guildId");
         requireNonBlank(emojiId, "emojiId");
-        JsonNode result = restClient.request("DELETE", "/guilds/" + guildId + "/emojis/" + emojiId, null);
+        Map<String, Object> result = restClient.request("DELETE", "/guilds/" + guildId + "/emojis/" + emojiId, null);
         if (stateCache != null) {
             stateCache.invalidateGuildEmojis(guildId);
         }
@@ -263,12 +259,12 @@ public final class DiscordApi {
     }
 
     // Webhooks
-    public JsonNode listChannelWebhooks(String channelId) {
+    public List<Map<String, Object>> listChannelWebhooks(String channelId) {
         requireNonBlank(channelId, "channelId");
         return getOrLoad(
-                cache(() -> stateCache == null ? Optional.empty() : stateCache.getChannelWebhooks(channelId)),
+                stateCache == null ? Optional.empty() : stateCache.getChannelWebhooks(channelId),
                 () -> {
-                    JsonNode webhooks = restClient.request("GET", "/channels/" + channelId + "/webhooks", null);
+                    List<Map<String, Object>> webhooks = restClient.requestList("GET", "/channels/" + channelId + "/webhooks", null);
                     if (stateCache != null) {
                         stateCache.putChannelWebhooks(channelId, webhooks);
                     }
@@ -277,12 +273,12 @@ public final class DiscordApi {
         );
     }
 
-    public JsonNode listGuildWebhooks(String guildId) {
+    public List<Map<String, Object>> listGuildWebhooks(String guildId) {
         requireNonBlank(guildId, "guildId");
         return getOrLoad(
-                cache(() -> stateCache == null ? Optional.empty() : stateCache.getGuildWebhooks(guildId)),
+                stateCache == null ? Optional.empty() : stateCache.getGuildWebhooks(guildId),
                 () -> {
-                    JsonNode webhooks = restClient.request("GET", "/guilds/" + guildId + "/webhooks", null);
+                    List<Map<String, Object>> webhooks = restClient.requestList("GET", "/guilds/" + guildId + "/webhooks", null);
                     if (stateCache != null) {
                         stateCache.putGuildWebhooks(guildId, webhooks);
                     }
@@ -291,22 +287,22 @@ public final class DiscordApi {
         );
     }
 
-    public JsonNode createWebhook(String channelId, String name) {
+    public Map<String, Object> createWebhook(String channelId, String name) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(name, "name");
-        JsonNode result = restClient.request("POST", "/channels/" + channelId + "/webhooks", Map.of("name", name));
+        Map<String, Object> result = restClient.request("POST", "/channels/" + channelId + "/webhooks", Map.of("name", name));
         if (stateCache != null) {
             stateCache.invalidateChannelWebhooks(channelId);
         }
         return result;
     }
 
-    public JsonNode deleteWebhook(String webhookId) {
+    public Map<String, Object> deleteWebhook(String webhookId) {
         requireNonBlank(webhookId, "webhookId");
         return restClient.request("DELETE", "/webhooks/" + webhookId, null);
     }
 
-    public JsonNode executeWebhook(String webhookId, String webhookToken, String content) {
+    public Map<String, Object> executeWebhook(String webhookId, String webhookToken, String content) {
         requireNonBlank(webhookId, "webhookId");
         requireNonBlank(webhookToken, "webhookToken");
         Map<String, Object> payload = new LinkedHashMap<>();
@@ -315,36 +311,36 @@ public final class DiscordApi {
     }
 
     // Threads
-    public JsonNode startThreadFromMessage(String channelId, String messageId, Map<String, Object> payload) {
+    public Map<String, Object> startThreadFromMessage(String channelId, String messageId, Map<String, Object> payload) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         Objects.requireNonNull(payload, "payload");
         return restClient.request("POST", "/channels/" + channelId + "/messages/" + messageId + "/threads", payload);
     }
 
-    public JsonNode startThreadWithoutMessage(String channelId, Map<String, Object> payload) {
+    public Map<String, Object> startThreadWithoutMessage(String channelId, Map<String, Object> payload) {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(payload, "payload");
         return restClient.request("POST", "/channels/" + channelId + "/threads", payload);
     }
 
-    public JsonNode joinThread(String threadId) {
+    public Map<String, Object> joinThread(String threadId) {
         requireNonBlank(threadId, "threadId");
         return restClient.request("PUT", "/channels/" + threadId + "/thread-members/@me", null);
     }
 
-    public JsonNode listPublicArchivedThreads(String channelId) {
+    public Map<String, Object> listPublicArchivedThreads(String channelId) {
         requireNonBlank(channelId, "channelId");
         return restClient.request("GET", "/channels/" + channelId + "/threads/archived/public", null);
     }
 
     // Scheduled Events
-    public JsonNode listGuildScheduledEvents(String guildId, boolean withUserCount) {
+    public List<Map<String, Object>> listGuildScheduledEvents(String guildId, boolean withUserCount) {
         requireNonBlank(guildId, "guildId");
         return getOrLoad(
-                cache(() -> stateCache == null ? Optional.empty() : stateCache.getScheduledEvents(guildId)),
+                stateCache == null ? Optional.empty() : stateCache.getScheduledEvents(guildId),
                 () -> {
-                    JsonNode events = restClient.request(
+                    List<Map<String, Object>> events = restClient.requestList(
                             "GET",
                             "/guilds/" + guildId + "/scheduled-events?with_user_count=" + withUserCount,
                             null
@@ -357,38 +353,38 @@ public final class DiscordApi {
         );
     }
 
-    public JsonNode createGuildScheduledEvent(String guildId, Map<String, Object> payload) {
+    public Map<String, Object> createGuildScheduledEvent(String guildId, Map<String, Object> payload) {
         requireNonBlank(guildId, "guildId");
         Objects.requireNonNull(payload, "payload");
-        JsonNode result = restClient.request("POST", "/guilds/" + guildId + "/scheduled-events", payload);
+        Map<String, Object> result = restClient.request("POST", "/guilds/" + guildId + "/scheduled-events", payload);
         if (stateCache != null) {
             stateCache.invalidateScheduledEvents(guildId);
         }
         return result;
     }
 
-    public JsonNode modifyGuildScheduledEvent(String guildId, String eventId, Map<String, Object> payload) {
+    public Map<String, Object> modifyGuildScheduledEvent(String guildId, String eventId, Map<String, Object> payload) {
         requireNonBlank(guildId, "guildId");
         requireNonBlank(eventId, "eventId");
         Objects.requireNonNull(payload, "payload");
-        JsonNode result = restClient.request("PATCH", "/guilds/" + guildId + "/scheduled-events/" + eventId, payload);
+        Map<String, Object> result = restClient.request("PATCH", "/guilds/" + guildId + "/scheduled-events/" + eventId, payload);
         if (stateCache != null) {
             stateCache.invalidateScheduledEvents(guildId);
         }
         return result;
     }
 
-    public JsonNode deleteGuildScheduledEvent(String guildId, String eventId) {
+    public Map<String, Object> deleteGuildScheduledEvent(String guildId, String eventId) {
         requireNonBlank(guildId, "guildId");
         requireNonBlank(eventId, "eventId");
-        JsonNode result = restClient.request("DELETE", "/guilds/" + guildId + "/scheduled-events/" + eventId, null);
+        Map<String, Object> result = restClient.request("DELETE", "/guilds/" + guildId + "/scheduled-events/" + eventId, null);
         if (stateCache != null) {
             stateCache.invalidateScheduledEvents(guildId);
         }
         return result;
     }
 
-    public JsonNode request(String method, String path, Map<String, Object> body) {
+    public Map<String, Object> request(String method, String path, Map<String, Object> body) {
         requireNonBlank(method, "method");
         requireNonBlank(path, "path");
         if (!path.startsWith("/")) {

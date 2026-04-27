@@ -1,7 +1,7 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -140,7 +140,7 @@ class SlashCommandRouterTest {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> invocationCount.incrementAndGet());
 
         router.handleInteraction(null);
-        assertDoesNotThrow(() -> router.handleInteraction(MAPPER.createObjectNode().put("type", 999)));
+        assertDoesNotThrow(() -> router.handleInteraction(new DiscordInteractionPayload(null, null, 999, null, null, null, null, null)));
         assertEquals(0, invocationCount.get());
     }
 
@@ -177,7 +177,7 @@ class SlashCommandRouterTest {
     void deferMethodsUseExpectedResponseTypes() throws Exception {
         AtomicReference<Integer> responseType = new AtomicReference<>();
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> responseType.set(type));
-        JsonNode interaction = interactionPayload(2, "ping", null, "123", "abc", null, 1);
+        DiscordInteractionPayload interaction = interactionPayload(2, "ping", null, "123", "abc", null, 1);
 
         router.deferMessage(interaction);
         assertEquals(5, responseType.get());
@@ -250,7 +250,7 @@ class SlashCommandRouterTest {
 
     @Test
     void returnsModalInputValueWhenPresent() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = readInteraction("""
                 {
                   "type": 5,
                   "id": "123",
@@ -282,7 +282,7 @@ class SlashCommandRouterTest {
 
     @Test
     void returnsStringOptionValueWhenPresent() throws Exception {
-        JsonNode interaction = interactionPayload(2, "echo", null, "123", "abc", "hello", 1);
+        DiscordInteractionPayload interaction = interactionPayload(2, "echo", null, "123", "abc", "hello", 1);
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
         });
 
@@ -328,8 +328,8 @@ class SlashCommandRouterTest {
         SlashCommandRouter router = new SlashCommandRouter((id, token, type, data) -> {
         });
 
-        JsonNode missingId = interactionPayload(2, "ping", null, "", "token", null, 1);
-        JsonNode missingToken = interactionPayload(2, "ping", null, "id", "", null, 1);
+        DiscordInteractionPayload missingId = interactionPayload(2, "ping", null, "", "token", null, 1);
+        DiscordInteractionPayload missingToken = interactionPayload(2, "ping", null, "id", "", null, 1);
 
         assertThrows(IllegalArgumentException.class, () -> router.respondWithMessage(missingId, "pong"));
         assertThrows(IllegalArgumentException.class, () -> router.respondWithMessage(missingToken, "pong"));
@@ -358,7 +358,7 @@ class SlashCommandRouterTest {
         assertEquals(64, responseData.get().get("flags"));
     }
 
-    private static JsonNode interactionPayload(
+    private static DiscordInteractionPayload interactionPayload(
             int type,
             String commandName,
             String customId,
@@ -389,6 +389,10 @@ class SlashCommandRouterTest {
                   "data": %s
                 }
                 """.formatted(type, id, token, data);
-        return MAPPER.readTree(json);
+        return readInteraction(json);
+    }
+
+    private static DiscordInteractionPayload readInteraction(String json) throws Exception {
+        return MAPPER.readValue(json, DiscordInteractionPayload.class);
     }
 }

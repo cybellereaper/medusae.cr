@@ -1,6 +1,5 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.medusae.http.DiscordRestClient;
 import org.junit.jupiter.api.Test;
@@ -30,10 +29,10 @@ class DiscordApiTest {
         CapturingHttpClient httpClient = new CapturingHttpClient("{\"id\":\"123\"}", 200);
         DiscordApi api = buildApi(httpClient);
 
-        JsonNode response = api.getChannel("123");
+        ChannelSnapshot response = api.getChannel("123");
 
         assertEquals("/api/v10/channels/123", httpClient.lastRequest.uri().getPath());
-        assertEquals("123", response.path("id").asText());
+        assertEquals("123", response.id());
     }
 
     @Test

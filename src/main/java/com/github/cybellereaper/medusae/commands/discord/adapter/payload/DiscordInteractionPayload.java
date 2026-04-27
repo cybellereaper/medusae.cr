@@ -2,15 +2,37 @@ package com.github.cybellereaper.medusae.commands.discord.adapter.payload;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JsonNode;
+import com.github.cybellereaper.medusae.client.ResolvedAttachment;
+import com.github.cybellereaper.medusae.client.ResolvedChannel;
+import com.github.cybellereaper.medusae.client.ResolvedMember;
+import com.github.cybellereaper.medusae.client.ResolvedMessage;
+import com.github.cybellereaper.medusae.client.ResolvedRole;
+import com.github.cybellereaper.medusae.client.ResolvedUser;
 
 import java.util.List;
 import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record DiscordInteractionPayload(
+        String id,
+        String token,
+        Integer type,
+        @JsonProperty("guild_id") String guildId,
+        @JsonProperty("channel_id") String channelId,
+        Member member,
+        ResolvedUser user,
         Data data
 ) {
+    public int typeOrZero() {
+        return type == null ? 0 : type;
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record Member(
+            ResolvedUser user
+    ) {
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Data(
             String name,
@@ -28,7 +50,7 @@ public record DiscordInteractionPayload(
     public record Option(
             String name,
             Integer type,
-            JsonNode value,
+            DiscordOptionValue value,
             Boolean focused,
             List<Option> options,
             Resolved resolved
@@ -50,12 +72,12 @@ public record DiscordInteractionPayload(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Resolved(
-            Map<String, JsonNode> users,
-            Map<String, JsonNode> members,
-            Map<String, JsonNode> channels,
-            Map<String, JsonNode> roles,
-            Map<String, JsonNode> attachments,
-            Map<String, JsonNode> messages
+            Map<String, ResolvedUser> users,
+            Map<String, ResolvedMember> members,
+            Map<String, ResolvedChannel> channels,
+            Map<String, ResolvedRole> roles,
+            Map<String, ResolvedAttachment> attachments,
+            Map<String, ResolvedMessage> messages
     ) {
     }
 }

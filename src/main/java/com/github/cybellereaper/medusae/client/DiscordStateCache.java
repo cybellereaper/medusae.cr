@@ -1,7 +1,6 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
-
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -10,50 +9,43 @@ import java.util.concurrent.ConcurrentHashMap;
  * Optional in-memory cache for gateway snapshots and read-mostly REST collections.
  */
 public final class DiscordStateCache {
-    private final Map<String, JsonNode> guildsById = new ConcurrentHashMap<>();
-    private final Map<String, JsonNode> channelsById = new ConcurrentHashMap<>();
-    private final Map<String, JsonNode> membersByCompositeKey = new ConcurrentHashMap<>();
+    private final Map<String, GuildSnapshot> guildsById = new ConcurrentHashMap<>();
+    private final Map<String, ChannelSnapshot> channelsById = new ConcurrentHashMap<>();
+    private final Map<String, GuildMemberSnapshot> membersByCompositeKey = new ConcurrentHashMap<>();
 
-    private final Map<String, JsonNode> guildRolesByGuildId = new ConcurrentHashMap<>();
-    private final Map<String, JsonNode> guildEmojisByGuildId = new ConcurrentHashMap<>();
-    private final Map<String, JsonNode> guildWebhooksByGuildId = new ConcurrentHashMap<>();
-    private final Map<String, JsonNode> channelWebhooksByChannelId = new ConcurrentHashMap<>();
-    private final Map<String, JsonNode> scheduledEventsByGuildId = new ConcurrentHashMap<>();
+    private final Map<String, List<Map<String, Object>>> guildRolesByGuildId = new ConcurrentHashMap<>();
+    private final Map<String, List<Map<String, Object>>> guildEmojisByGuildId = new ConcurrentHashMap<>();
+    private final Map<String, List<Map<String, Object>>> guildWebhooksByGuildId = new ConcurrentHashMap<>();
+    private final Map<String, List<Map<String, Object>>> channelWebhooksByChannelId = new ConcurrentHashMap<>();
+    private final Map<String, List<Map<String, Object>>> scheduledEventsByGuildId = new ConcurrentHashMap<>();
 
     private static String memberKey(String guildId, String userId) {
         return guildId + ":" + userId;
     }
 
-    private static String idOf(JsonNode node) {
-        return node.path("id").asText("");
-    }
-
-    private static void putCollection(Map<String, JsonNode> collectionCache, String key, JsonNode value) {
+    private static void putCollection(Map<String, List<Map<String, Object>>> collectionCache, String key, List<Map<String, Object>> value) {
         if (key != null && !key.isBlank() && value != null) {
-            collectionCache.put(key, value.deepCopy());
+            collectionCache.put(key, List.copyOf(value.stream().map(Map::copyOf).toList()));
         }
     }
 
-    public void putGuild(JsonNode guild) {
-        String id = idOf(guild);
-        if (!id.isBlank()) {
-            guildsById.put(id, guild.deepCopy());
+    public void putGuild(GuildSnapshot guild) {
+        if (guild != null && guild.id() != null && !guild.id().isBlank()) {
+            guildsById.put(guild.id(), guild);
         }
     }
 
-    public void putChannel(JsonNode channel) {
-        String id = idOf(channel);
-        if (!id.isBlank()) {
-            channelsById.put(id, channel.deepCopy());
+    public void putChannel(ChannelSnapshot channel) {
+        if (channel != null && channel.id() != null && !channel.id().isBlank()) {
+            channelsById.put(channel.id(), channel);
         }
     }
 
-    public void putMember(JsonNode eventPayload) {
-        String guildId = eventPayload.path("guild_id").asText("");
-        JsonNode user = eventPayload.path("user");
-        String userId = idOf(user);
+    public void putMember(GuildMemberSnapshot eventPayload) {
+        String guildId = eventPayload == null ? "" : stringOrEmpty(eventPayload.guildId());
+        String userId = eventPayload == null || eventPayload.user() == null ? "" : stringOrEmpty(eventPayload.user().id());
         if (!guildId.isBlank() && !userId.isBlank()) {
-            membersByCompositeKey.put(memberKey(guildId, userId), eventPayload.deepCopy());
+            membersByCompositeKey.put(memberKey(guildId, userId), eventPayload);
         }
     }
 
@@ -80,23 +72,23 @@ public final class DiscordStateCache {
         }
     }
 
-    public Optional<JsonNode> getGuild(String guildId) {
+    public Optional<GuildSnapshot> getGuild(String guildId) {
         return Optional.ofNullable(guildsById.get(guildId));
     }
 
-    public Optional<JsonNode> getChannel(String channelId) {
+    public Optional<ChannelSnapshot> getChannel(String channelId) {
         return Optional.ofNullable(channelsById.get(channelId));
     }
 
-    public Optional<JsonNode> getMember(String guildId, String userId) {
+    public Optional<GuildMemberSnapshot> getMember(String guildId, String userId) {
         return Optional.ofNullable(membersByCompositeKey.get(memberKey(guildId, userId)));
     }
 
-    public Optional<JsonNode> getGuildRoles(String guildId) {
+    public Optional<List<Map<String, Object>>> getGuildRoles(String guildId) {
         return Optional.ofNullable(guildRolesByGuildId.get(guildId));
     }
 
-    public void putGuildRoles(String guildId, JsonNode roles) {
+    public void putGuildRoles(String guildId, List<Map<String, Object>> roles) {
         putCollection(guildRolesByGuildId, guildId, roles);
     }
 
@@ -104,11 +96,11 @@ public final class DiscordStateCache {
         guildRolesByGuildId.remove(guildId);
     }
 
-    public Optional<JsonNode> getGuildEmojis(String guildId) {
+    public Optional<List<Map<String, Object>>> getGuildEmojis(String guildId) {
         return Optional.ofNullable(guildEmojisByGuildId.get(guildId));
     }
 
-    public void putGuildEmojis(String guildId, JsonNode emojis) {
+    public void putGuildEmojis(String guildId, List<Map<String, Object>> emojis) {
         putCollection(guildEmojisByGuildId, guildId, emojis);
     }
 
@@ -116,11 +108,11 @@ public final class DiscordStateCache {
         guildEmojisByGuildId.remove(guildId);
     }
 
-    public Optional<JsonNode> getGuildWebhooks(String guildId) {
+    public Optional<List<Map<String, Object>>> getGuildWebhooks(String guildId) {
         return Optional.ofNullable(guildWebhooksByGuildId.get(guildId));
     }
 
-    public void putGuildWebhooks(String guildId, JsonNode webhooks) {
+    public void putGuildWebhooks(String guildId, List<Map<String, Object>> webhooks) {
         putCollection(guildWebhooksByGuildId, guildId, webhooks);
     }
 
@@ -128,11 +120,11 @@ public final class DiscordStateCache {
         guildWebhooksByGuildId.remove(guildId);
     }
 
-    public Optional<JsonNode> getChannelWebhooks(String channelId) {
+    public Optional<List<Map<String, Object>>> getChannelWebhooks(String channelId) {
         return Optional.ofNullable(channelWebhooksByChannelId.get(channelId));
     }
 
-    public void putChannelWebhooks(String channelId, JsonNode webhooks) {
+    public void putChannelWebhooks(String channelId, List<Map<String, Object>> webhooks) {
         putCollection(channelWebhooksByChannelId, channelId, webhooks);
     }
 
@@ -140,15 +132,19 @@ public final class DiscordStateCache {
         channelWebhooksByChannelId.remove(channelId);
     }
 
-    public Optional<JsonNode> getScheduledEvents(String guildId) {
+    public Optional<List<Map<String, Object>>> getScheduledEvents(String guildId) {
         return Optional.ofNullable(scheduledEventsByGuildId.get(guildId));
     }
 
-    public void putScheduledEvents(String guildId, JsonNode events) {
+    public void putScheduledEvents(String guildId, List<Map<String, Object>> events) {
         putCollection(scheduledEventsByGuildId, guildId, events);
     }
 
     public void invalidateScheduledEvents(String guildId) {
         scheduledEventsByGuildId.remove(guildId);
+    }
+
+    private static String stringOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

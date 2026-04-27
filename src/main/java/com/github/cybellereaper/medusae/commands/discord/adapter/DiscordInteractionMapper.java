@@ -1,13 +1,12 @@
 package com.github.cybellereaper.medusae.commands.discord.adapter;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.medusae.client.*;
 import com.github.cybellereaper.medusae.commands.core.model.*;
-import com.github.cybellereaper.medusae.commands.core.resolve.ConversionSupport;
 import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayloadReader;
 import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordOptionType;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordOptionValue;
 
 import java.util.*;
 
@@ -93,35 +92,74 @@ public final class DiscordInteractionMapper {
         }
     }
 
-    private static Object parseOptionValue(DiscordOptionType type, JsonNode rawValue) {
-        if (rawValue == null || rawValue.isNull() || rawValue.isMissingNode()) {
+    private static Object parseOptionValue(DiscordOptionType type, DiscordOptionValue rawValue) {
+        if (rawValue == null) {
             return null;
         }
+        Object value = rawValue.value();
         return switch (type) {
-            case STRING -> rawValue.asText();
-            case INTEGER -> parseLong(rawValue);
-            case BOOLEAN -> parseBoolean(rawValue);
-            case USER, CHANNEL, ROLE, MENTIONABLE, ATTACHMENT -> parseEntityId(rawValue);
-            case NUMBER -> parseDouble(rawValue);
+            case STRING -> value == null ? null : value.toString();
+            case INTEGER -> parseLong(value);
+            case BOOLEAN -> parseBoolean(value);
+            case USER, CHANNEL, ROLE, MENTIONABLE, ATTACHMENT -> parseEntityId(value);
+            case NUMBER -> parseDouble(value);
             case SUB_COMMAND, SUB_COMMAND_GROUP ->
                     throw new IllegalStateException("Subcommand options do not expose scalar values");
         };
     }
 
-    private static String parseEntityId(JsonNode rawValue) {
-        return ConversionSupport.normalizeEntityId(rawValue);
+    private static String parseEntityId(Object rawValue) {
+        if (rawValue instanceof String value) {
+            String trimmed = value.trim();
+            return trimmed.isEmpty() ? null : trimmed;
+        }
+        if (rawValue instanceof Number number) {
+            return Long.toString(number.longValue());
+        }
+        return null;
     }
 
-    private static Long parseLong(JsonNode rawValue) {
-        return ConversionSupport.parseLong(rawValue);
+    private static Long parseLong(Object rawValue) {
+        if (rawValue instanceof Number number) {
+            return number.longValue();
+        }
+        if (rawValue instanceof String value) {
+            try {
+                return Long.parseLong(value.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
-    private static Double parseDouble(JsonNode rawValue) {
-        return ConversionSupport.parseDouble(rawValue);
+    private static Double parseDouble(Object rawValue) {
+        if (rawValue instanceof Number number) {
+            return number.doubleValue();
+        }
+        if (rawValue instanceof String value) {
+            try {
+                return Double.parseDouble(value.trim());
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
     }
 
-    private static Boolean parseBoolean(JsonNode rawValue) {
-        return ConversionSupport.parseBooleanStrict(rawValue);
+    private static Boolean parseBoolean(Object rawValue) {
+        if (rawValue instanceof Boolean value) {
+            return value;
+        }
+        if (rawValue instanceof String value) {
+            if ("true".equalsIgnoreCase(value.trim())) {
+                return true;
+            }
+            if ("false".equalsIgnoreCase(value.trim())) {
+                return false;
+            }
+        }
+        return null;
     }
 
     private static String textOrNull(String text) {
@@ -149,76 +187,24 @@ public final class DiscordInteractionMapper {
         if (resolved == null) {
             return ResolvedEntities.empty();
         }
-        Map<String, ResolvedUser> users = convertUsers(resolved.users());
+        Map<String, ResolvedUser> users = copyResolved(resolved.users());
         return new ResolvedEntities(
                 users,
                 convertMembers(resolved.members(), users),
-                convertRoles(resolved.roles()),
-                convertChannels(resolved.channels()),
-                convertMessages(resolved.messages()),
-                convertAttachments(resolved.attachments())
+                copyResolved(resolved.roles()),
+                copyResolved(resolved.channels()),
+                copyResolved(resolved.messages()),
+                copyResolved(resolved.attachments())
         );
     }
 
-    private static Map<String, ResolvedUser> convertUsers(Map<String, JsonNode> users) {
-        if (users == null || users.isEmpty()) return Map.of();
-        Map<String, ResolvedUser> converted = new HashMap<>();
-        users.forEach((id, node) -> putIfPresent(converted, id, ResolvedUser.from(node)));
-        return Map.copyOf(converted);
+    private static <T> Map<String, T> copyResolved(Map<String, T> values) {
+        return values == null || values.isEmpty() ? Map.of() : Map.copyOf(values);
     }
 
-    private static Map<String, ResolvedMember> convertMembers(Map<String, JsonNode> members, Map<String, ResolvedUser> users) {
-        if (members == null || members.isEmpty()) return Map.of();
-        Map<String, ResolvedMember> converted = new HashMap<>();
-        members.forEach((id, node) -> {
-            if (users.containsKey(id)) {
-                putIfPresent(converted, id, ResolvedMember.from(id, node));
-            }
-        });
-        return Map.copyOf(converted);
-    }
-
-    private static Map<String, ResolvedRole> convertRoles(Map<String, JsonNode> roles) {
-        if (roles == null || roles.isEmpty()) return Map.of();
-        Map<String, ResolvedRole> converted = new HashMap<>();
-        roles.forEach((id, node) -> putIfPresent(converted, id, ResolvedRole.from(node)));
-        return Map.copyOf(converted);
-    }
-
-    private static Map<String, ResolvedChannel> convertChannels(Map<String, JsonNode> channels) {
-        if (channels == null || channels.isEmpty()) return Map.of();
-        Map<String, ResolvedChannel> converted = new HashMap<>();
-        channels.forEach((id, node) -> putIfPresent(converted, id, ResolvedChannel.from(node)));
-        return Map.copyOf(converted);
-    }
-
-    private static Map<String, ResolvedMessage> convertMessages(Map<String, JsonNode> messages) {
-        if (messages == null || messages.isEmpty()) return Map.of();
-        Map<String, ResolvedMessage> converted = new HashMap<>();
-        messages.forEach((id, node) -> putIfPresent(converted, id, ResolvedMessage.from(node)));
-        return Map.copyOf(converted);
-    }
-
-    private static Map<String, ResolvedAttachment> convertAttachments(Map<String, JsonNode> attachments) {
-        if (attachments == null || attachments.isEmpty()) return Map.of();
-        Map<String, ResolvedAttachment> converted = new HashMap<>();
-        attachments.forEach((id, node) -> putIfPresent(converted, id, ResolvedAttachment.from(node)));
-        return Map.copyOf(converted);
-    }
-
-    private static <T> void putIfPresent(Map<String, T> target, String id, T value) {
-        if (id != null && value != null) {
-            target.put(id, value);
-        }
-    }
-
-    public CommandInteraction toCoreInteraction(JsonNode interaction, InteractionContext context) {
-        Objects.requireNonNull(interaction, "interaction");
+    public CommandInteraction toCoreInteraction(DiscordInteractionPayload interactionPayload, InteractionContext context) {
+        Objects.requireNonNull(interactionPayload, "interaction");
         Objects.requireNonNull(context, "context");
-        return toCoreInteraction(payloadReader.read(interaction), interaction, context);
-    }
-
-    CommandInteraction toCoreInteraction(DiscordInteractionPayload interactionPayload, JsonNode rawInteraction, InteractionContext context) {
         var data = interactionPayload.data();
         ResolvedEntities resolvedEntities = toResolvedEntities(data == null ? null : data.resolved());
         CommandType commandType = mapCommandType(orDefault(data == null ? null : data.type(), 1));
@@ -237,7 +223,7 @@ public final class DiscordInteractionMapper {
                 parsed.subcommand,
                 parsed.options,
                 focusedOption(data == null ? null : data.options()),
-                rawInteraction,
+                interactionPayload,
                 context.guildId() == null,
                 context.guildId(),
                 context.userId(),
@@ -258,9 +244,20 @@ public final class DiscordInteractionMapper {
         );
     }
 
-    public InteractionExecution toComponentInteraction(JsonNode interaction, InteractionContext context, InteractionHandlerType type) {
+    private static Map<String, ResolvedMember> convertMembers(Map<String, ResolvedMember> members, Map<String, ResolvedUser> users) {
+        if (members == null || members.isEmpty()) return Map.of();
+        Map<String, ResolvedMember> converted = new HashMap<>();
+        members.forEach((id, member) -> {
+            if (id != null && member != null && users.containsKey(id)) {
+                converted.put(id, new ResolvedMember(id, member.nickname()));
+            }
+        });
+        return Map.copyOf(converted);
+    }
+
+    public InteractionExecution toComponentInteraction(DiscordInteractionPayload interaction, InteractionContext context, InteractionHandlerType type) {
         Objects.requireNonNull(type, "type");
-        DiscordInteractionPayload payload = payloadReader.read(interaction);
+        DiscordInteractionPayload payload = Objects.requireNonNull(interaction, "interaction");
         ResolvedEntities resolvedEntities = toResolvedEntities(payload.data() == null ? null : payload.data().resolved());
         return new InteractionExecution(
                 type,
@@ -277,9 +274,9 @@ public final class DiscordInteractionMapper {
         );
     }
 
-    public InteractionExecution toModalInteraction(JsonNode interaction, InteractionContext context) {
+    public InteractionExecution toModalInteraction(DiscordInteractionPayload interaction, InteractionContext context) {
         Map<String, String> fields = new HashMap<>();
-        DiscordInteractionPayload payload = payloadReader.read(interaction);
+        DiscordInteractionPayload payload = Objects.requireNonNull(interaction, "interaction");
         var rows = payload.data() == null ? null : payload.data().components();
         if (rows != null) {
             for (DiscordInteractionPayload.ActionRow row : rows) {
@@ -311,9 +308,9 @@ public final class DiscordInteractionMapper {
         );
     }
 
-    Integer componentType(JsonNode interaction) {
-        DiscordInteractionPayload payload = payloadReader.read(interaction);
-        return payload.data() == null ? null : payload.data().componentType();
+    Integer componentType(DiscordInteractionPayload interaction) {
+        Objects.requireNonNull(interaction, "interaction");
+        return interaction.data() == null ? null : interaction.data().componentType();
     }
 
     private static final class ParsedData {

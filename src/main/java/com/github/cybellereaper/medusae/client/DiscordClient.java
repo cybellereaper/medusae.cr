@@ -1,15 +1,17 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import com.github.cybellereaper.medusae.gateway.DiscordGatewayClient;
 import com.github.cybellereaper.medusae.gateway.DiscordGatewayClient.EventDeserializer;
+import com.github.cybellereaper.medusae.http.DiscordApplication;
 import com.github.cybellereaper.medusae.http.DiscordRestClient;
 import com.github.cybellereaper.medusae.http.RateLimitObserver;
 import com.github.cybellereaper.medusae.http.RetryPolicy;
 
 import java.net.http.HttpClient;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -29,7 +31,7 @@ public final class DiscordClient implements AutoCloseable {
         this.slashCommandRouter = new SlashCommandRouter(restClient::createInteractionResponse);
         this.api = new DiscordApi(restClient, stateCache);
         this.stateCache = stateCache;
-        this.gatewayClient.on("INTERACTION_CREATE", slashCommandRouter::handleInteraction);
+        this.gatewayClient.on("INTERACTION_CREATE", DiscordInteractionPayload.class, slashCommandRouter::handleInteraction);
         registerCacheListeners();
     }
 
@@ -64,10 +66,6 @@ public final class DiscordClient implements AutoCloseable {
         gatewayClient.connect();
     }
 
-    public void on(String eventType, Consumer<JsonNode> listener) {
-        gatewayClient.on(eventType, listener);
-    }
-
     public <T> void on(String eventType, Class<T> eventClass, Consumer<T> listener) {
         gatewayClient.on(eventType, eventClass, listener);
     }
@@ -81,16 +79,11 @@ public final class DiscordClient implements AutoCloseable {
         gatewayClient.on(eventType, eventClass, deserializer, listener);
     }
 
-    public boolean off(String eventType, Consumer<JsonNode> listener) {
-        return gatewayClient.off(eventType, listener);
-    }
-
     public <T> boolean off(String eventType, Class<T> eventClass, Consumer<T> listener) {
         return gatewayClient.off(eventType, eventClass, listener);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void onSlashCommand(String commandName, Consumer<JsonNode> listener) {
+    public void onSlashCommand(String commandName, Consumer<DiscordInteractionPayload> listener) {
         slashCommandRouter.registerSlashHandler(commandName, listener);
     }
 
@@ -98,8 +91,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerSlashContextHandler(commandName, listener);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void onAutocomplete(String commandName, Consumer<JsonNode> listener) {
+    public void onAutocomplete(String commandName, Consumer<DiscordInteractionPayload> listener) {
         slashCommandRouter.registerAutocompleteHandler(commandName, listener);
     }
 
@@ -107,8 +99,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerAutocompleteContextHandler(commandName, listener);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void onUserContextMenu(String commandName, Consumer<JsonNode> listener) {
+    public void onUserContextMenu(String commandName, Consumer<DiscordInteractionPayload> listener) {
         slashCommandRouter.registerUserContextMenuHandler(commandName, listener);
     }
 
@@ -116,8 +107,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerUserContextMenuContextHandler(commandName, listener);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void onMessageContextMenu(String commandName, Consumer<JsonNode> listener) {
+    public void onMessageContextMenu(String commandName, Consumer<DiscordInteractionPayload> listener) {
         slashCommandRouter.registerMessageContextMenuHandler(commandName, listener);
     }
 
@@ -125,8 +115,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerMessageContextMenuContextHandler(commandName, listener);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void onComponentInteraction(String customId, Consumer<JsonNode> listener) {
+    public void onComponentInteraction(String customId, Consumer<DiscordInteractionPayload> listener) {
         slashCommandRouter.registerComponentHandler(customId, listener);
     }
 
@@ -138,8 +127,7 @@ public final class DiscordClient implements AutoCloseable {
         slashCommandRouter.registerGlobalComponentContextHandler(listener);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void onModalSubmit(String customId, Consumer<JsonNode> listener) {
+    public void onModalSubmit(String customId, Consumer<DiscordInteractionPayload> listener) {
         slashCommandRouter.registerModalHandler(customId, listener);
     }
 
@@ -159,20 +147,20 @@ public final class DiscordClient implements AutoCloseable {
         return Optional.ofNullable(stateCache);
     }
 
-    public JsonNode registerGlobalSlashCommand(String commandName, String description) {
+    public Map<String, Object> registerGlobalSlashCommand(String commandName, String description) {
         return registerGlobalSlashCommand(SlashCommandDefinition.simple(commandName, description));
     }
 
-    public JsonNode registerGlobalSlashCommand(SlashCommandDefinition command) {
+    public Map<String, Object> registerGlobalSlashCommand(SlashCommandDefinition command) {
         Objects.requireNonNull(command, "command");
         return restClient.createGlobalApplicationCommand(resolveApplicationId(), command);
     }
 
-    public JsonNode registerGlobalUserContextMenu(String commandName) {
+    public Map<String, Object> registerGlobalUserContextMenu(String commandName) {
         return registerGlobalSlashCommand(SlashCommandDefinition.userContextMenu(commandName));
     }
 
-    public JsonNode registerGlobalMessageContextMenu(String commandName) {
+    public Map<String, Object> registerGlobalMessageContextMenu(String commandName) {
         return registerGlobalSlashCommand(SlashCommandDefinition.messageContextMenu(commandName));
     }
 
@@ -180,22 +168,22 @@ public final class DiscordClient implements AutoCloseable {
         registerCommands(commands, this::registerGlobalSlashCommand);
     }
 
-    public JsonNode registerGuildSlashCommand(String guildId, String commandName, String description) {
+    public Map<String, Object> registerGuildSlashCommand(String guildId, String commandName, String description) {
         return registerGuildSlashCommand(guildId, SlashCommandDefinition.simple(commandName, description));
     }
 
-    public JsonNode registerGuildSlashCommand(String guildId, SlashCommandDefinition command) {
+    public Map<String, Object> registerGuildSlashCommand(String guildId, SlashCommandDefinition command) {
         requireNonBlank(guildId, "guildId");
         Objects.requireNonNull(command, "command");
 
         return restClient.createGuildApplicationCommand(resolveApplicationId(), guildId, command);
     }
 
-    public JsonNode registerGuildUserContextMenu(String guildId, String commandName) {
+    public Map<String, Object> registerGuildUserContextMenu(String guildId, String commandName) {
         return registerGuildSlashCommand(guildId, SlashCommandDefinition.userContextMenu(commandName));
     }
 
-    public JsonNode registerGuildMessageContextMenu(String guildId, String commandName) {
+    public Map<String, Object> registerGuildMessageContextMenu(String guildId, String commandName) {
         return registerGuildSlashCommand(guildId, SlashCommandDefinition.messageContextMenu(commandName));
     }
 
@@ -204,63 +192,51 @@ public final class DiscordClient implements AutoCloseable {
         registerCommands(commands, command -> registerGuildSlashCommand(guildId, command));
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void respondWithMessage(JsonNode interaction, String content) {
+    public void respondWithMessage(DiscordInteractionPayload interaction, String content) {
         respondWithMessage(interaction, DiscordMessage.ofContent(content));
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void respondWithMessage(JsonNode interaction, DiscordMessage message) {
+    public void respondWithMessage(DiscordInteractionPayload interaction, DiscordMessage message) {
         slashCommandRouter.respondWithMessage(interaction, message);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void respondWithUpdatedMessage(JsonNode interaction, DiscordMessage message) {
+    public void respondWithUpdatedMessage(DiscordInteractionPayload interaction, DiscordMessage message) {
         slashCommandRouter.respondWithUpdatedMessage(interaction, message);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void respondWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
+    public void respondWithEmbeds(DiscordInteractionPayload interaction, String content, List<DiscordEmbed> embeds) {
         slashCommandRouter.respondWithEmbeds(interaction, content, embeds);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void respondEphemeral(JsonNode interaction, String content) {
+    public void respondEphemeral(DiscordInteractionPayload interaction, String content) {
         slashCommandRouter.respondEphemeral(interaction, content);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void respondEphemeralWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
+    public void respondEphemeralWithEmbeds(DiscordInteractionPayload interaction, String content, List<DiscordEmbed> embeds) {
         slashCommandRouter.respondEphemeralWithEmbeds(interaction, content, embeds);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void respondWithModal(JsonNode interaction, DiscordModal modal) {
+    public void respondWithModal(DiscordInteractionPayload interaction, DiscordModal modal) {
         slashCommandRouter.respondWithModal(interaction, modal);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void respondWithAutocompleteChoices(JsonNode interaction, List<AutocompleteChoice> choices) {
+    public void respondWithAutocompleteChoices(DiscordInteractionPayload interaction, List<AutocompleteChoice> choices) {
         slashCommandRouter.respondWithAutocompleteChoices(interaction, choices);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void deferMessage(JsonNode interaction) {
+    public void deferMessage(DiscordInteractionPayload interaction) {
         slashCommandRouter.deferMessage(interaction);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public void deferUpdate(JsonNode interaction) {
+    public void deferUpdate(DiscordInteractionPayload interaction) {
         slashCommandRouter.deferUpdate(interaction);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public String getStringOption(JsonNode interaction, String optionName) {
+    public String getStringOption(DiscordInteractionPayload interaction, String optionName) {
         return slashCommandRouter.getOptionString(interaction, optionName);
     }
 
-    @Deprecated(forRemoval = false, since = "1.1")
-    public String getModalValue(JsonNode interaction, String customId) {
+    public String getModalValue(DiscordInteractionPayload interaction, String customId) {
         return slashCommandRouter.getModalValue(interaction, customId);
     }
 
@@ -302,36 +278,36 @@ public final class DiscordClient implements AutoCloseable {
             return;
         }
 
-        gatewayClient.on("GUILD_CREATE", stateCache::putGuild);
-        gatewayClient.on("GUILD_UPDATE", stateCache::putGuild);
-        gatewayClient.on("GUILD_DELETE", payload -> stateCache.removeGuild(payload.path("id").asText("")));
+        gatewayClient.on("GUILD_CREATE", GuildSnapshot.class, stateCache::putGuild);
+        gatewayClient.on("GUILD_UPDATE", GuildSnapshot.class, stateCache::putGuild);
+        gatewayClient.on("GUILD_DELETE", GuildSnapshot.class, payload -> stateCache.removeGuild(stringOrEmpty(payload.id())));
 
-        gatewayClient.on("CHANNEL_CREATE", stateCache::putChannel);
-        gatewayClient.on("CHANNEL_UPDATE", stateCache::putChannel);
-        gatewayClient.on("CHANNEL_DELETE", payload -> stateCache.removeChannel(payload.path("id").asText("")));
+        gatewayClient.on("CHANNEL_CREATE", ChannelSnapshot.class, stateCache::putChannel);
+        gatewayClient.on("CHANNEL_UPDATE", ChannelSnapshot.class, stateCache::putChannel);
+        gatewayClient.on("CHANNEL_DELETE", ChannelSnapshot.class, payload -> stateCache.removeChannel(stringOrEmpty(payload.id())));
 
-        gatewayClient.on("GUILD_MEMBER_ADD", stateCache::putMember);
-        gatewayClient.on("GUILD_MEMBER_UPDATE", stateCache::putMember);
-        gatewayClient.on("GUILD_MEMBER_REMOVE", payload -> {
-            String guildId = payload.path("guild_id").asText("");
-            String userId = payload.path("user").path("id").asText("");
+        gatewayClient.on("GUILD_MEMBER_ADD", GuildMemberSnapshot.class, stateCache::putMember);
+        gatewayClient.on("GUILD_MEMBER_UPDATE", GuildMemberSnapshot.class, stateCache::putMember);
+        gatewayClient.on("GUILD_MEMBER_REMOVE", GuildMemberSnapshot.class, payload -> {
+            String guildId = stringOrEmpty(payload.guildId());
+            String userId = payload.user() == null ? "" : stringOrEmpty(payload.user().id());
             stateCache.removeMember(guildId, userId);
         });
 
-        gatewayClient.on("GUILD_ROLE_CREATE", payload -> stateCache.invalidateGuildRoles(payload.path("guild_id").asText("")));
-        gatewayClient.on("GUILD_ROLE_UPDATE", payload -> stateCache.invalidateGuildRoles(payload.path("guild_id").asText("")));
-        gatewayClient.on("GUILD_ROLE_DELETE", payload -> stateCache.invalidateGuildRoles(payload.path("guild_id").asText("")));
+        gatewayClient.on("GUILD_ROLE_CREATE", GuildScopedEvent.class, payload -> stateCache.invalidateGuildRoles(stringOrEmpty(payload.guildId())));
+        gatewayClient.on("GUILD_ROLE_UPDATE", GuildScopedEvent.class, payload -> stateCache.invalidateGuildRoles(stringOrEmpty(payload.guildId())));
+        gatewayClient.on("GUILD_ROLE_DELETE", GuildScopedEvent.class, payload -> stateCache.invalidateGuildRoles(stringOrEmpty(payload.guildId())));
 
-        gatewayClient.on("GUILD_EMOJIS_UPDATE", payload -> stateCache.invalidateGuildEmojis(payload.path("guild_id").asText("")));
-        gatewayClient.on("WEBHOOKS_UPDATE", payload -> {
-            String guildId = payload.path("guild_id").asText("");
-            String channelId = payload.path("channel_id").asText("");
+        gatewayClient.on("GUILD_EMOJIS_UPDATE", GuildScopedEvent.class, payload -> stateCache.invalidateGuildEmojis(stringOrEmpty(payload.guildId())));
+        gatewayClient.on("WEBHOOKS_UPDATE", WebhooksUpdateEvent.class, payload -> {
+            String guildId = stringOrEmpty(payload.guildId());
+            String channelId = stringOrEmpty(payload.channelId());
             stateCache.invalidateGuildWebhooks(guildId);
             stateCache.invalidateChannelWebhooks(channelId);
         });
-        gatewayClient.on("GUILD_SCHEDULED_EVENT_CREATE", payload -> stateCache.invalidateScheduledEvents(payload.path("guild_id").asText("")));
-        gatewayClient.on("GUILD_SCHEDULED_EVENT_UPDATE", payload -> stateCache.invalidateScheduledEvents(payload.path("guild_id").asText("")));
-        gatewayClient.on("GUILD_SCHEDULED_EVENT_DELETE", payload -> stateCache.invalidateScheduledEvents(payload.path("guild_id").asText("")));
+        gatewayClient.on("GUILD_SCHEDULED_EVENT_CREATE", GuildScopedEvent.class, payload -> stateCache.invalidateScheduledEvents(stringOrEmpty(payload.guildId())));
+        gatewayClient.on("GUILD_SCHEDULED_EVENT_UPDATE", GuildScopedEvent.class, payload -> stateCache.invalidateScheduledEvents(stringOrEmpty(payload.guildId())));
+        gatewayClient.on("GUILD_SCHEDULED_EVENT_DELETE", GuildScopedEvent.class, payload -> stateCache.invalidateScheduledEvents(stringOrEmpty(payload.guildId())));
     }
 
     private String resolveApplicationId() {
@@ -346,5 +322,9 @@ public final class DiscordClient implements AutoCloseable {
             }
             return applicationId;
         }
+    }
+
+    private static String stringOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 }

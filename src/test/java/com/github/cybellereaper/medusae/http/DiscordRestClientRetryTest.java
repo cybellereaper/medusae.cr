@@ -45,7 +45,7 @@ class DiscordRestClientRetryTest {
 
         DiscordRestClient restClient = buildClient(httpClient, new RetryPolicy(3, Duration.ofMillis(1), Duration.ofMillis(2), 0));
 
-        assertTrue(restClient.request("GET", "/test", null).path("ok").asBoolean());
+        assertEquals(Boolean.TRUE, restClient.request("GET", "/test", null).get("ok"));
         assertEquals(3, httpClient.sendCalls.get());
         assertEquals(2, observer.retries.size());
         assertEquals("transport", observer.retries.get(0).reason());
@@ -64,7 +64,7 @@ class DiscordRestClientRetryTest {
 
         DiscordRestClient restClient = buildClient(httpClient, new RetryPolicy(2, Duration.ofMillis(1), Duration.ofMillis(2), 0));
 
-        assertTrue(restClient.request("GET", "/test", null).path("ok").asBoolean());
+        assertEquals(Boolean.TRUE, restClient.request("GET", "/test", null).get("ok"));
         assertEquals(1, observer.retries.size());
         assertEquals("rate_limit", observer.retries.get(0).reason());
         assertEquals(Duration.ofMillis(1), observer.retries.get(0).backoff());

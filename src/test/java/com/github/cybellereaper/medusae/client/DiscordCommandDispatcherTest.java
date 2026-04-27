@@ -7,6 +7,7 @@ import com.github.cybellereaper.medusae.commands.core.interaction.context.Compon
 import com.github.cybellereaper.medusae.commands.core.interaction.context.SelectContext;
 import com.github.cybellereaper.medusae.commands.core.response.InteractionReply;
 import com.github.cybellereaper.medusae.commands.discord.adapter.DiscordCommandDispatcher;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -136,8 +137,8 @@ class DiscordCommandDispatcherTest {
         assertEquals(expectedContent, data.get().get("content"));
     }
 
-    private static com.fasterxml.jackson.databind.JsonNode interactionJson() throws Exception {
-        return MAPPER.readTree("""
+    private static DiscordInteractionPayload interactionJson() throws Exception {
+        return MAPPER.readValue("""
                 {
                   "id": "123",
                   "token": "abc",
@@ -148,15 +149,15 @@ class DiscordCommandDispatcherTest {
                     "options": []
                   }
                 }
-                """);
+                """, DiscordInteractionPayload.class);
     }
 
-    private static com.fasterxml.jackson.databind.JsonNode componentInteractionJson() throws Exception {
+    private static DiscordInteractionPayload componentInteractionJson() throws Exception {
         return componentInteractionJson(2, "confirm_button");
     }
 
-    private static com.fasterxml.jackson.databind.JsonNode componentInteractionJson(int componentType, String customId) throws Exception {
-        return MAPPER.readTree("""
+    private static DiscordInteractionPayload componentInteractionJson(int componentType, String customId) throws Exception {
+        return MAPPER.readValue("""
                 {
                   "id": "124",
                   "token": "component-token",
@@ -166,6 +167,6 @@ class DiscordCommandDispatcherTest {
                     "component_type": %d
                   }
                 }
-                """.formatted(customId, componentType));
+                """.formatted(customId, componentType), DiscordInteractionPayload.class);
     }
 }

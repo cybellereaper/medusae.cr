@@ -1,8 +1,9 @@
 package com.github.cybellereaper.medusae.http;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.medusae.client.DiscordAttachment;
+import com.github.cybellereaper.medusae.client.GuildSnapshot;
+import com.github.cybellereaper.medusae.client.ChannelSnapshot;
 import com.github.cybellereaper.medusae.client.DiscordClientConfig;
 import com.github.cybellereaper.medusae.client.SlashCommandDefinition;
 import com.github.cybellereaper.medusae.gateway.GatewayBotInfo;
@@ -62,36 +63,35 @@ public final class DiscordRestClient {
     }
 
     public GatewayBotInfo getGatewayBotInfo() {
-        JsonNode node = request("GET", "/gateway/bot", null);
-        JsonNode sessionStart = node.path("session_start_limit");
-
+        GatewayBotInfoResponse node = request("GET", "/gateway/bot", null, GatewayBotInfoResponse.class);
+        GatewayBotInfoResponse.SessionStartLimit sessionStart = node.sessionStartLimit();
         return new GatewayBotInfo(
-                node.path("url").asText(),
-                node.path("shards").asInt(),
+                node.url(),
+                node.shards(),
                 new GatewayBotInfo.SessionStartLimit(
-                        sessionStart.path("total").asInt(),
-                        sessionStart.path("remaining").asInt(),
-                        sessionStart.path("reset_after").asLong(),
-                        sessionStart.path("max_concurrency").asInt()
+                        sessionStart.total(),
+                        sessionStart.remaining(),
+                        sessionStart.resetAfter(),
+                        sessionStart.maxConcurrency()
                 )
         );
     }
 
-    public JsonNode getCurrentApplication() {
-        return request("GET", "/oauth2/applications/@me", null);
+    public DiscordApplication getCurrentApplication() {
+        return request("GET", "/oauth2/applications/@me", null, DiscordApplication.class);
     }
 
     public String getCurrentApplicationId() {
-        return getCurrentApplication().path("id").asText();
+        return getCurrentApplication().id();
     }
 
-    public JsonNode sendMessage(String channelId, Map<String, Object> payload) {
+    public Map<String, Object> sendMessage(String channelId, Map<String, Object> payload) {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(payload, "payload");
         return request("POST", "/channels/" + channelId + "/messages", payload);
     }
 
-    public JsonNode sendMessageWithAttachments(String channelId, Map<String, Object> payload, List<DiscordAttachment> attachments) {
+    public Map<String, Object> sendMessageWithAttachments(String channelId, Map<String, Object> payload, List<DiscordAttachment> attachments) {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(payload, "payload");
         Objects.requireNonNull(attachments, "attachments");
@@ -113,43 +113,53 @@ public final class DiscordRestClient {
                 .header("Content-Type", "multipart/form-data; boundary=" + multipartBody.boundary())
                 .method("POST", multipartBody.toPublisher());
 
-        return requestInternal("POST", path, builder.build());
+        return requestInternal("POST", path, builder.build(), DiscordRestResponse.class).objectBody();
     }
 
-    public JsonNode getMessage(String channelId, String messageId) {
+    public ChannelSnapshot getChannel(String channelId) {
+        requireNonBlank(channelId, "channelId");
+        return request("GET", "/channels/" + channelId, null, ChannelSnapshot.class);
+    }
+
+    public GuildSnapshot getGuild(String guildId) {
+        requireNonBlank(guildId, "guildId");
+        return request("GET", "/guilds/" + guildId, null, GuildSnapshot.class);
+    }
+
+    public Map<String, Object> getMessage(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return request("GET", "/channels/" + channelId + "/messages/" + messageId, null);
     }
 
-    public JsonNode editMessage(String channelId, String messageId, Map<String, Object> payload) {
+    public Map<String, Object> editMessage(String channelId, String messageId, Map<String, Object> payload) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         Objects.requireNonNull(payload, "payload");
         return request("PATCH", "/channels/" + channelId + "/messages/" + messageId, payload);
     }
 
-    public JsonNode getChannelMessages(String channelId, Map<String, Object> query) {
+    public List<Map<String, Object>> getChannelMessages(String channelId, Map<String, Object> query) {
         requireNonBlank(channelId, "channelId");
         Objects.requireNonNull(query, "query");
-        return request("GET", "/channels/" + channelId + "/messages" + toQueryString(query), null);
+        return requestList("GET", "/channels/" + channelId + "/messages" + toQueryString(query), null);
     }
 
-    public JsonNode addReaction(String channelId, String messageId, String emoji) {
+    public Map<String, Object> addReaction(String channelId, String messageId, String emoji) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         requireNonBlank(emoji, "emoji");
         return request("PUT", "/channels/" + channelId + "/messages/" + messageId + "/reactions/" + emoji + "/@me", null);
     }
 
-    public JsonNode removeOwnReaction(String channelId, String messageId, String emoji) {
+    public Map<String, Object> removeOwnReaction(String channelId, String messageId, String emoji) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         requireNonBlank(emoji, "emoji");
         return request("DELETE", "/channels/" + channelId + "/messages/" + messageId + "/reactions/" + emoji + "/@me", null);
     }
 
-    public JsonNode removeUserReaction(String channelId, String messageId, String emoji, String userId) {
+    public Map<String, Object> removeUserReaction(String channelId, String messageId, String emoji, String userId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         requireNonBlank(emoji, "emoji");
@@ -157,49 +167,49 @@ public final class DiscordRestClient {
         return request("DELETE", "/channels/" + channelId + "/messages/" + messageId + "/reactions/" + emoji + "/" + userId, null);
     }
 
-    public JsonNode clearMessageReactionEmoji(String channelId, String messageId, String emoji) {
+    public Map<String, Object> clearMessageReactionEmoji(String channelId, String messageId, String emoji) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         requireNonBlank(emoji, "emoji");
         return request("DELETE", "/channels/" + channelId + "/messages/" + messageId + "/reactions/" + emoji, null);
     }
 
-    public JsonNode clearMessageReactions(String channelId, String messageId) {
+    public Map<String, Object> clearMessageReactions(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return request("DELETE", "/channels/" + channelId + "/messages/" + messageId + "/reactions", null);
     }
 
-    public JsonNode pinMessage(String channelId, String messageId) {
+    public Map<String, Object> pinMessage(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return request("PUT", "/channels/" + channelId + "/pins/" + messageId, null);
     }
 
-    public JsonNode unpinMessage(String channelId, String messageId) {
+    public Map<String, Object> unpinMessage(String channelId, String messageId) {
         requireNonBlank(channelId, "channelId");
         requireNonBlank(messageId, "messageId");
         return request("DELETE", "/channels/" + channelId + "/pins/" + messageId, null);
     }
 
-    public JsonNode listPinnedMessages(String channelId) {
+    public List<Map<String, Object>> listPinnedMessages(String channelId) {
         requireNonBlank(channelId, "channelId");
-        return request("GET", "/channels/" + channelId + "/pins", null);
+        return requestList("GET", "/channels/" + channelId + "/pins", null);
     }
 
-    public JsonNode triggerTypingIndicator(String channelId) {
+    public Map<String, Object> triggerTypingIndicator(String channelId) {
         requireNonBlank(channelId, "channelId");
         return request("POST", "/channels/" + channelId + "/typing", null);
     }
 
-    public JsonNode createGuildApplicationCommand(String applicationId, String guildId, SlashCommandDefinition command) {
+    public Map<String, Object> createGuildApplicationCommand(String applicationId, String guildId, SlashCommandDefinition command) {
         validateCommandContext(applicationId, command);
         requireNonBlank(guildId, "guildId");
 
         return request("POST", "/applications/" + applicationId + "/guilds/" + guildId + "/commands", command.toRequestPayload());
     }
 
-    public JsonNode createInteractionResponse(String interactionId, String interactionToken, int type, Map<String, Object> data) {
+    public Map<String, Object> createInteractionResponse(String interactionId, String interactionToken, int type, Map<String, Object> data) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", type);
         if (data != null && !data.isEmpty()) {
@@ -209,17 +219,25 @@ public final class DiscordRestClient {
         return request("POST", "/interactions/" + interactionId + "/" + interactionToken + "/callback", payload);
     }
 
-    public JsonNode createGlobalApplicationCommand(String applicationId, SlashCommandDefinition command) {
+    public Map<String, Object> createGlobalApplicationCommand(String applicationId, SlashCommandDefinition command) {
         validateCommandContext(applicationId, command);
         return request("POST", "/applications/" + applicationId + "/commands", command.toRequestPayload());
     }
 
-    public JsonNode request(String method, String path, Object body) {
-        HttpRequest request = buildRequest(method, path, body);
-        return requestInternal(method, path, request);
+    public Map<String, Object> request(String method, String path, Object body) {
+        return request(method, path, body, DiscordRestResponse.class).objectBody();
     }
 
-    private JsonNode requestInternal(String method, String path, HttpRequest request) {
+    public List<Map<String, Object>> requestList(String method, String path, Object body) {
+        return request(method, path, body, DiscordRestResponse.class).objectListBody();
+    }
+
+    public <T> T request(String method, String path, Object body, Class<T> responseType) {
+        HttpRequest request = buildRequest(method, path, body);
+        return requestInternal(method, path, request, responseType);
+    }
+
+    private <T> T requestInternal(String method, String path, HttpRequest request, Class<T> responseType) {
         String routeKey = method + " " + path;
         String bucketId = routeToBucket.getOrDefault(routeKey, routeKey);
         Instant startedAt = Instant.now();
@@ -260,10 +278,10 @@ public final class DiscordRestClient {
             recordCompletion(method, path, attempt, response.statusCode(), startedAt);
 
             if (response.body() == null || response.body().isBlank()) {
-                return objectMapper.createObjectNode();
+                return readJson("{}", responseType);
             }
 
-            return readJson(response.body());
+            return readJson(response.body(), responseType);
         }
 
         throw new IllegalStateException("Request attempts exhausted unexpectedly");
@@ -301,7 +319,7 @@ public final class DiscordRestClient {
             return false;
         }
 
-        JsonNode body = readJsonOrEmpty(response.body());
+        RateLimitErrorBody body = readJsonOrEmpty(response.body(), RateLimitErrorBody.class);
         double retryAfterSeconds = rateLimitManager.updateFrom429(bucketId, body);
         if (attempt >= retryPolicy.maxAttempts()) {
             return false;
@@ -373,19 +391,19 @@ public final class DiscordRestClient {
         }
     }
 
-    private JsonNode readJson(String json) {
+    private <T> T readJson(String json, Class<T> responseType) {
         try {
-            return objectMapper.readTree(json);
+            return objectMapper.readValue(json, responseType);
         } catch (IOException exception) {
             throw new RuntimeException("Failed to parse Discord response", exception);
         }
     }
 
-    private JsonNode readJsonOrEmpty(String json) {
+    private <T> T readJsonOrEmpty(String json, Class<T> responseType) {
         if (json == null || json.isBlank()) {
-            return objectMapper.createObjectNode();
+            return readJson("{}", responseType);
         }
-        return readJson(json);
+        return readJson(json, responseType);
     }
 
     private String toQueryString(Map<String, Object> query) {

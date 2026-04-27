@@ -1,7 +1,9 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordOptionValue;
 
+import java.util.List;
 import java.util.Objects;
 
 final class InteractionOptionReader {
@@ -10,28 +12,28 @@ final class InteractionOptionReader {
     private static final String NAME_FIELD = "name";
     private static final String VALUE_FIELD = "value";
 
-    private final JsonNode options;
+    private final List<DiscordInteractionPayload.Option> options;
 
-    InteractionOptionReader(JsonNode options) {
-        this.options = Objects.requireNonNull(options, "options");
+    InteractionOptionReader(List<DiscordInteractionPayload.Option> options) {
+        this.options = options;
     }
 
     String optionString(String optionName) {
-        JsonNode option = findOptionNode(optionName);
-        return option == null ? null : textOrNull(option.path(VALUE_FIELD));
+        DiscordInteractionPayload.Option option = findOptionNode(optionName);
+        return option == null ? null : textOrNull(option.value());
     }
 
     Long optionLong(String optionName) {
-        JsonNode value = optionValue(optionName);
+        Object value = optionValue(optionName);
         if (value == null) {
             return null;
         }
-        if (value.isIntegralNumber()) {
-            return value.longValue();
+        if (value instanceof Number number) {
+            return number.longValue();
         }
-        if (value.isTextual()) {
+        if (value instanceof String text) {
             try {
-                return Long.parseLong(value.asText().trim());
+                return Long.parseLong(text.trim());
             } catch (NumberFormatException ignored) {
                 return null;
             }
@@ -48,15 +50,15 @@ final class InteractionOptionReader {
     }
 
     Boolean optionBoolean(String optionName) {
-        JsonNode value = optionValue(optionName);
+        Object value = optionValue(optionName);
         if (value == null) {
             return null;
         }
-        if (value.isBoolean()) {
-            return value.booleanValue();
+        if (value instanceof Boolean bool) {
+            return bool;
         }
-        if (value.isTextual()) {
-            String text = value.asText().trim();
+        if (value instanceof String raw) {
+            String text = raw.trim();
             if ("true".equalsIgnoreCase(text)) {
                 return true;
             }
@@ -68,16 +70,16 @@ final class InteractionOptionReader {
     }
 
     Double optionDouble(String optionName) {
-        JsonNode value = optionValue(optionName);
+        Object value = optionValue(optionName);
         if (value == null) {
             return null;
         }
-        if (value.isNumber()) {
-            return value.doubleValue();
+        if (value instanceof Number number) {
+            return number.doubleValue();
         }
-        if (value.isTextual()) {
+        if (value instanceof String text) {
             try {
-                return Double.parseDouble(value.asText().trim());
+                return Double.parseDouble(text.trim());
             } catch (NumberFormatException ignored) {
                 return null;
             }
@@ -86,39 +88,39 @@ final class InteractionOptionReader {
     }
 
     String optionResolvedId(String optionName) {
-        JsonNode value = optionValue(optionName);
+        Object value = optionValue(optionName);
         if (value == null) {
             return null;
         }
-        if (value.isTextual()) {
-            String text = value.asText().trim();
+        if (value instanceof String raw) {
+            String text = raw.trim();
             return text.isEmpty() ? null : text;
         }
-        if (value.isIntegralNumber()) {
-            return Long.toString(value.longValue());
+        if (value instanceof Number number) {
+            return Long.toString(number.longValue());
         }
         return null;
     }
 
-    private JsonNode optionValue(String optionName) {
-        JsonNode option = findOptionNode(optionName);
-        return option == null ? null : option.path(VALUE_FIELD);
+    private Object optionValue(String optionName) {
+        DiscordInteractionPayload.Option option = findOptionNode(optionName);
+        return option == null ? null : unwrap(option.value());
     }
 
-    private JsonNode findOptionNode(String optionName) {
+    private DiscordInteractionPayload.Option findOptionNode(String optionName) {
         Objects.requireNonNull(optionName, "optionName");
         return findOptionNode(optionName, options);
     }
 
-    private static JsonNode findOptionNode(String optionName, JsonNode candidateOptions) {
-        if (!candidateOptions.isArray()) {
+    private static DiscordInteractionPayload.Option findOptionNode(String optionName, List<DiscordInteractionPayload.Option> candidateOptions) {
+        if (candidateOptions == null || candidateOptions.isEmpty()) {
             return null;
         }
-        for (JsonNode option : candidateOptions) {
-            if (optionName.equals(option.path(NAME_FIELD).asText())) {
+        for (DiscordInteractionPayload.Option option : candidateOptions) {
+            if (optionName.equals(option.name())) {
                 return option;
             }
-            JsonNode nested = findOptionNode(optionName, option.path(OPTIONS_FIELD));
+            DiscordInteractionPayload.Option nested = findOptionNode(optionName, option.options());
             if (nested != null) {
                 return nested;
             }
@@ -126,11 +128,16 @@ final class InteractionOptionReader {
         return null;
     }
 
-    static String textOrNull(JsonNode node) {
-        if (node.isMissingNode() || node.isNull()) {
+    static String textOrNull(Object value) {
+        value = unwrap(value);
+        if (value == null) {
             return null;
         }
-        String text = node.asText();
+        String text = value.toString();
         return text.isBlank() ? null : text;
+    }
+
+    private static Object unwrap(Object value) {
+        return value instanceof DiscordOptionValue optionValue ? optionValue.value() : value;
     }
 }

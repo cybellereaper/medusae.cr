@@ -1,6 +1,5 @@
 package com.github.cybellereaper.medusae.commands.core;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.medusae.commands.core.exception.ResolutionException;
 import com.github.cybellereaper.medusae.commands.core.resolve.ConversionSupport;
 import org.junit.jupiter.api.Test;
@@ -8,8 +7,6 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ConversionSupportTest {
-    private static final ObjectMapper JSON = new ObjectMapper();
-
     @Test
     void parsesRawStringsWithBoundaryValues() {
         assertEquals(Integer.MIN_VALUE, ConversionSupport.parseInt(Integer.toString(Integer.MIN_VALUE)));
@@ -29,19 +26,11 @@ class ConversionSupportTest {
     }
 
     @Test
-    void parsesJsonNodesAndNormalizesEntityIds() throws Exception {
-        assertEquals(42L, ConversionSupport.parseLong(JSON.readTree("42")));
-        assertEquals(42L, ConversionSupport.parseLong(JSON.readTree("\" 42 \"")));
-        assertNull(ConversionSupport.parseLong(JSON.readTree("\"forty-two\"")));
-
-        assertEquals(7.5D, ConversionSupport.parseDouble(JSON.readTree("\" 7.5 \"")));
-        assertEquals(true, ConversionSupport.parseBooleanStrict(JSON.readTree("\"true\"")));
-        assertNull(ConversionSupport.parseBooleanStrict(JSON.readTree("\"truthy\"")));
-
-        assertEquals("123", ConversionSupport.normalizeEntityId(JSON.readTree("123")));
-        assertEquals("abc", ConversionSupport.normalizeEntityId(JSON.readTree("\" abc \"")));
-        assertNull(ConversionSupport.normalizeEntityId(JSON.readTree("\"   \"")));
-        assertNull(ConversionSupport.normalizeEntityId(JSON.readTree("true")));
+    void normalizesEntityIdsFromStrings() {
+        assertEquals("123", ConversionSupport.normalizeEntityId("123"));
+        assertEquals("abc", ConversionSupport.normalizeEntityId(" abc "));
+        assertNull(ConversionSupport.normalizeEntityId("   "));
+        assertNull(ConversionSupport.normalizeEntityId(null));
     }
 
     @Test

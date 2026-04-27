@@ -4,11 +4,12 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ResolvedMember(
-        String userId,
+public record GuildMemberSnapshot(
+        @JsonProperty("guild_id") String guildId,
+        ResolvedUser user,
         @JsonProperty("nick") String nickname
 ) {
-    public ResolvedMember withUserId(String userId) {
-        return new ResolvedMember(userId, nickname);
+    public String userId() {
+        return user == null ? null : user.id();
     }
 }

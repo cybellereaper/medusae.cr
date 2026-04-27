@@ -1,6 +1,5 @@
 package com.github.cybellereaper.medusae.commands.core.resolve;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.github.cybellereaper.medusae.commands.core.exception.ResolutionException;
 
 import java.util.Locale;
@@ -16,13 +15,6 @@ public final class ConversionSupport {
         return raw;
     }
 
-    public static String parseString(JsonNode raw) {
-        if (isMissing(raw)) {
-            return null;
-        }
-        return raw.asText();
-    }
-
     public static Long parseLong(String raw) {
         if (raw == null) {
             return null;
@@ -34,28 +26,7 @@ public final class ConversionSupport {
         }
     }
 
-    public static Long parseLong(JsonNode raw) {
-        if (isMissing(raw)) {
-            return null;
-        }
-        if (raw.isIntegralNumber()) {
-            return raw.longValue();
-        }
-        if (raw.isTextual()) {
-            return parseLong(raw.asText());
-        }
-        return null;
-    }
-
     public static Integer parseInt(String raw) {
-        Long parsed = parseLong(raw);
-        if (parsed == null || parsed < Integer.MIN_VALUE || parsed > Integer.MAX_VALUE) {
-            return null;
-        }
-        return parsed.intValue();
-    }
-
-    public static Integer parseInt(JsonNode raw) {
         Long parsed = parseLong(raw);
         if (parsed == null || parsed < Integer.MIN_VALUE || parsed > Integer.MAX_VALUE) {
             return null;
@@ -74,19 +45,6 @@ public final class ConversionSupport {
         }
     }
 
-    public static Double parseDouble(JsonNode raw) {
-        if (isMissing(raw)) {
-            return null;
-        }
-        if (raw.isNumber()) {
-            return raw.doubleValue();
-        }
-        if (raw.isTextual()) {
-            return parseDouble(raw.asText());
-        }
-        return null;
-    }
-
     public static Boolean parseBooleanStrict(String raw) {
         if (raw == null) {
             return null;
@@ -101,37 +59,11 @@ public final class ConversionSupport {
         return null;
     }
 
-    public static Boolean parseBooleanStrict(JsonNode raw) {
-        if (isMissing(raw)) {
-            return null;
-        }
-        if (raw.isBoolean()) {
-            return raw.booleanValue();
-        }
-        if (raw.isTextual()) {
-            return parseBooleanStrict(raw.asText());
-        }
-        return null;
-    }
-
     public static Boolean parseBooleanLenient(String raw) {
         if (raw == null) {
             return null;
         }
         return Boolean.parseBoolean(raw);
-    }
-
-    public static String normalizeEntityId(JsonNode raw) {
-        if (isMissing(raw)) {
-            return null;
-        }
-        if (raw.isTextual()) {
-            return normalizeEntityId(raw.asText());
-        }
-        if (raw.isIntegralNumber()) {
-            return Long.toString(raw.longValue());
-        }
-        return null;
     }
 
     public static String normalizeEntityId(String raw) {
@@ -187,7 +119,4 @@ public final class ConversionSupport {
         return null;
     }
 
-    private static boolean isMissing(JsonNode raw) {
-        return raw == null || raw.isNull() || raw.isMissingNode();
-    }
 }

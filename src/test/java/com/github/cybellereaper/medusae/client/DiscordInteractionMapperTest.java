@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.medusae.commands.core.model.CommandType;
 import com.github.cybellereaper.medusae.commands.core.model.InteractionHandlerType;
 import com.github.cybellereaper.medusae.commands.discord.adapter.DiscordInteractionMapper;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,7 +21,7 @@ class DiscordInteractionMapperTest {
     @Test
     void mapsAllOfficialOptionTypesAndResolvedEntries() throws Exception {
         DiscordInteractionMapper mapper = new DiscordInteractionMapper();
-        var node = JSON.readTree("""
+        var node = interaction("""
                 {
                   "id":"1",
                   "token":"t",
@@ -83,7 +84,7 @@ class DiscordInteractionMapperTest {
     @Test
     void supportsSubcommandAndSubcommandGroupOptionTypes() throws Exception {
         DiscordInteractionMapper mapper = new DiscordInteractionMapper();
-        var node = JSON.readTree("""
+        var node = interaction("""
                 {
                   "id":"1",
                   "token":"t",
@@ -120,7 +121,7 @@ class DiscordInteractionMapperTest {
     @Test
     void mapsContextTargetsUsingResolvedMessagesUsersAndMembers() throws Exception {
         DiscordInteractionMapper mapper = new DiscordInteractionMapper();
-        var userContext = JSON.readTree("""
+        var userContext = interaction("""
                 {
                   "id":"1","token":"t","type":2,
                   "data":{
@@ -129,7 +130,7 @@ class DiscordInteractionMapperTest {
                   }
                 }
                 """);
-        var messageContext = JSON.readTree("""
+        var messageContext = interaction("""
                 {
                   "id":"1","token":"t","type":2,
                   "data":{
@@ -153,7 +154,7 @@ class DiscordInteractionMapperTest {
     @Test
     void handlesMissingOrPartialResolvedSectionsSafely() throws Exception {
         DiscordInteractionMapper mapper = new DiscordInteractionMapper();
-        var node = JSON.readTree("""
+        var node = interaction("""
                 {
                   "id":"1",
                   "token":"t",
@@ -184,7 +185,7 @@ class DiscordInteractionMapperTest {
     @Test
     void carriesResolvedDataForComponentAndModalInteractions() throws Exception {
         DiscordInteractionMapper mapper = new DiscordInteractionMapper();
-        var component = JSON.readTree("""
+        var component = interaction("""
                 {
                   "id":"9",
                   "token":"tt",
@@ -200,7 +201,7 @@ class DiscordInteractionMapperTest {
                 }
                 """);
 
-        var modal = JSON.readTree("""
+        var modal = interaction("""
                 {
                   "id":"10",
                   "token":"tt",
@@ -231,7 +232,7 @@ class DiscordInteractionMapperTest {
     @Test
     void handlesNullDataSafely() throws Exception {
         DiscordInteractionMapper mapper = new DiscordInteractionMapper();
-        var node = JSON.readTree("""
+        var node = interaction("""
                 {"id":"1","token":"t","type":2}
                 """);
         InteractionContext context = InteractionContext.from(node, (id, token, type, data) -> {});
@@ -246,7 +247,7 @@ class DiscordInteractionMapperTest {
     @Test
     void normalizesEntityIdsAndReturnsNullForMalformedScalars() throws Exception {
         DiscordInteractionMapper mapper = new DiscordInteractionMapper();
-        var node = JSON.readTree("""
+        var node = interaction("""
                 {
                   "id":"1",
                   "token":"t",
@@ -271,5 +272,9 @@ class DiscordInteractionMapperTest {
         assertNull(interaction.options().get("invalid_int").value());
         assertNull(interaction.options().get("invalid_bool").value());
         assertNull(interaction.options().get("null_number").value());
+    }
+
+    private static DiscordInteractionPayload interaction(String json) throws Exception {
+        return JSON.readValue(json, DiscordInteractionPayload.class);
     }
 }

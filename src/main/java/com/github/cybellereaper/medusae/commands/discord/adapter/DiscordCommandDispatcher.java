@@ -1,12 +1,12 @@
 package com.github.cybellereaper.medusae.commands.discord.adapter;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.github.cybellereaper.medusae.client.AutocompleteChoice;
 import com.github.cybellereaper.medusae.client.InteractionContext;
 import com.github.cybellereaper.medusae.commands.core.execute.CommandFramework;
 import com.github.cybellereaper.medusae.commands.core.execute.CommandResponder;
 import com.github.cybellereaper.medusae.commands.core.model.InteractionHandlerType;
 import com.github.cybellereaper.medusae.commands.core.response.CommandResponse;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import com.github.cybellereaper.medusae.commands.discord.response.DiscordResponseApplier;
 
 import java.util.List;
@@ -23,7 +23,7 @@ public final class DiscordCommandDispatcher {
         this.mapper = new DiscordInteractionMapper();
     }
 
-    public void dispatch(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatch(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         java.util.Objects.requireNonNull(interaction, "interaction");
         java.util.Objects.requireNonNull(interactionContext, "interactionContext");
         var coreInteraction = mapper.toCoreInteraction(interaction, interactionContext);
@@ -42,7 +42,7 @@ public final class DiscordCommandDispatcher {
         }
     }
 
-    public void dispatchAutocomplete(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchAutocomplete(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         java.util.Objects.requireNonNull(interaction, "interaction");
         java.util.Objects.requireNonNull(interactionContext, "interactionContext");
         var coreInteraction = mapper.toCoreInteraction(interaction, interactionContext);
@@ -57,11 +57,11 @@ public final class DiscordCommandDispatcher {
     }
 
 
-    public void dispatchButton(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchButton(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         dispatchComponent(interaction, interactionContext, InteractionHandlerType.BUTTON);
     }
 
-    public void dispatchComponent(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchComponent(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         java.util.Objects.requireNonNull(interaction, "interaction");
         java.util.Objects.requireNonNull(interactionContext, "interactionContext");
         Integer componentTypeCode = mapper.componentType(interaction);
@@ -79,27 +79,27 @@ public final class DiscordCommandDispatcher {
         }
     }
 
-    public void dispatchStringSelect(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchStringSelect(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         dispatchComponent(interaction, interactionContext, InteractionHandlerType.STRING_SELECT);
     }
 
-    public void dispatchUserSelect(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchUserSelect(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         dispatchComponent(interaction, interactionContext, InteractionHandlerType.USER_SELECT);
     }
 
-    public void dispatchRoleSelect(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchRoleSelect(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         dispatchComponent(interaction, interactionContext, InteractionHandlerType.ROLE_SELECT);
     }
 
-    public void dispatchMentionableSelect(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchMentionableSelect(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         dispatchComponent(interaction, interactionContext, InteractionHandlerType.MENTIONABLE_SELECT);
     }
 
-    public void dispatchChannelSelect(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchChannelSelect(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         dispatchComponent(interaction, interactionContext, InteractionHandlerType.CHANNEL_SELECT);
     }
 
-    public void dispatchModal(JsonNode interaction, InteractionContext interactionContext) {
+    public void dispatchModal(DiscordInteractionPayload interaction, InteractionContext interactionContext) {
         java.util.Objects.requireNonNull(interaction, "interaction");
         java.util.Objects.requireNonNull(interactionContext, "interactionContext");
         var coreInteraction = mapper.toModalInteraction(interaction, interactionContext);
@@ -118,7 +118,7 @@ public final class DiscordCommandDispatcher {
         }
     }
 
-    private void dispatchComponent(JsonNode interaction, InteractionContext interactionContext, InteractionHandlerType type) {
+    private void dispatchComponent(DiscordInteractionPayload interaction, InteractionContext interactionContext, InteractionHandlerType type) {
         java.util.Objects.requireNonNull(interaction, "interaction");
         java.util.Objects.requireNonNull(interactionContext, "interactionContext");
         var coreInteraction = mapper.toComponentInteraction(interaction, interactionContext, type);

@@ -1,6 +1,5 @@
 package com.github.cybellereaper.medusae.gateway;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.cybellereaper.medusae.client.DiscordClientConfig;
 import com.github.cybellereaper.medusae.gateway.events.MessageCreateEvent;
@@ -14,6 +13,8 @@ import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.util.List;
 import java.util.Collections;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -57,7 +58,7 @@ class DiscordGatewayClientTest {
     void dispatchesRawAndTypedListenersForSameEvent() {
         DiscordGatewayClient client = gatewayClient(new ObjectMapper());
         try {
-            AtomicReference<JsonNode> rawPayload = new AtomicReference<>();
+            AtomicReference<Map<String, Object>> rawPayload = new AtomicReference<>();
             AtomicReference<TestEvent> typedPayload = new AtomicReference<>();
 
             client.on("TEST_EVENT", rawPayload::set);
@@ -67,7 +68,7 @@ class DiscordGatewayClientTest {
                     {"op":0,"t":"TEST_EVENT","d":{"id":"7","name":"hello"}}
                     """, true);
 
-            assertEquals("7", rawPayload.get().path("id").asText());
+            assertEquals("7", rawPayload.get().get("id"));
             assertEquals("hello", typedPayload.get().name());
         } finally {
             client.close();
@@ -83,7 +84,7 @@ class DiscordGatewayClientTest {
 
             DiscordGatewayClient.EventDeserializer<String> trimmedContentDeserializer = (rawEvent, ignoredMapper) -> {
                 deserializeCalls.incrementAndGet();
-                return rawEvent.path("content").asText().trim();
+                return rawEvent.get("content").toString().trim();
             };
 
             client.on("MESSAGE_CREATE", String.class, trimmedContentDeserializer, value -> values.set(0, value));
@@ -108,7 +109,7 @@ class DiscordGatewayClientTest {
             AtomicInteger rawInvocations = new AtomicInteger(0);
             AtomicInteger typedInvocations = new AtomicInteger(0);
 
-            java.util.function.Consumer<JsonNode> rawListener = ignored -> rawInvocations.incrementAndGet();
+            java.util.function.Consumer<Map<String, Object>> rawListener = ignored -> rawInvocations.incrementAndGet();
             java.util.function.Consumer<TestEvent> typedListener = ignored -> typedInvocations.incrementAndGet();
 
             client.on("TEST_EVENT", rawListener);
@@ -171,10 +172,11 @@ class DiscordGatewayClientTest {
             client.onOpen(socket);
             client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
 
-            JsonNode sentPayload = mapper.readTree(socket.lastSentText.get());
-            assertEquals(2, sentPayload.path("op").asInt());
-            assertEquals(1, sentPayload.path("d").path("shard").get(0).asInt());
-            assertEquals(4, sentPayload.path("d").path("shard").get(1).asInt());
+            GatewayPayload sentPayload = mapper.readValue(socket.lastSentText.get(), GatewayPayload.class);
+            GatewayIdentifyPayload identify = mapper.convertValue(sentPayload.d(), GatewayIdentifyPayload.class);
+            assertEquals(2, sentPayload.op());
+            assertEquals(Optional.ofNullable(identify.shard()).orElseThrow().get(0), 1);
+            assertEquals(Optional.ofNullable(identify.shard()).orElseThrow().get(1), 4);
         } finally {
             client.close();
         }
@@ -215,10 +217,11 @@ class DiscordGatewayClientTest {
                     """, true);
             client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
 
-            JsonNode payload = mapper.readTree(socket.lastSentText.get());
-            assertEquals(6, payload.path("op").asInt());
-            assertEquals("abc", payload.path("d").path("session_id").asText());
-            assertEquals(3, payload.path("d").path("seq").asInt());
+            GatewayPayload payload = mapper.readValue(socket.lastSentText.get(), GatewayPayload.class);
+            GatewayResumePayload resume = mapper.convertValue(payload.d(), GatewayResumePayload.class);
+            assertEquals(6, payload.op());
+            assertEquals("abc", resume.sessionId());
+            assertEquals(3, resume.seq());
             assertNotNull(scheduler.fixedRateTask, "heartbeat task should be scheduled from HELLO");
         } finally {
             client.close();
@@ -238,8 +241,8 @@ class DiscordGatewayClientTest {
             client.onText(socket, "{\"op\":9,\"d\":false}", true);
             client.onText(socket, "{\"op\":10,\"d\":{\"heartbeat_interval\":45000}}", true);
 
-            JsonNode payload = mapper.readTree(socket.lastSentText.get());
-            assertEquals(2, payload.path("op").asInt(), "invalid non-resumable session should trigger IDENTIFY");
+            GatewayPayload payload = mapper.readValue(socket.lastSentText.get(), GatewayPayload.class);
+            assertEquals(2, payload.op(), "invalid non-resumable session should trigger IDENTIFY");
         } finally {
             client.close();
         }

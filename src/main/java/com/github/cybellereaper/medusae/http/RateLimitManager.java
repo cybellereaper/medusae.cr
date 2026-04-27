@@ -1,7 +1,5 @@
 package com.github.cybellereaper.medusae.http;
 
-import com.fasterxml.jackson.databind.JsonNode;
-
 import java.net.http.HttpHeaders;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,9 +46,9 @@ public final class RateLimitManager {
         }
     }
 
-    public double updateFrom429(String bucketId, JsonNode body) {
-        double retryAfterSeconds = body.path("retry_after").asDouble(1.0d);
-        boolean global = body.path("global").asBoolean(false);
+    public double updateFrom429(String bucketId, RateLimitErrorBody body) {
+        double retryAfterSeconds = body == null || body.retryAfter() == null ? 1.0d : body.retryAfter();
+        boolean global = body != null && Boolean.TRUE.equals(body.global());
         Duration retryAfter = Duration.ofMillis(Math.max(1, Math.round(retryAfterSeconds * 1000)));
         observer.onRateLimitedResponse(bucketId, retryAfter, global, 429);
         blockFor(bucketId, retryAfterSeconds, "429");

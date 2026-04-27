@@ -1,7 +1,7 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -15,7 +15,7 @@ class InteractionContextTest {
 
     @Test
     void readsNestedSlashCommandOptions() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "1",
                   "token": "abc",
@@ -45,7 +45,7 @@ class InteractionContextTest {
 
     @Test
     void returnsNullForInvalidOrEmptyOptionStrings() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "1",
                   "token": "abc",
@@ -68,7 +68,7 @@ class InteractionContextTest {
 
     @Test
     void validatesAutocompleteChoiceLimit() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "1",
                   "token": "abc",
@@ -92,7 +92,7 @@ class InteractionContextTest {
 
     @Test
     void supportsDefersAndBasicMetadata() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "9",
                   "token": "xyz",
@@ -122,7 +122,7 @@ class InteractionContextTest {
 
     @Test
     void respondWithUpdatedMessageUsesUpdateCallbackType() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "9",
                   "token": "xyz",
@@ -149,7 +149,7 @@ class InteractionContextTest {
 
     @Test
     void prefersMemberUserOverTopLevelUserId() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "55",
                   "token": "abc",
@@ -174,7 +174,7 @@ class InteractionContextTest {
 
     @Test
     void parsesNumericAndBooleanOptionsSafely() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "55",
                   "token": "abc",
@@ -222,7 +222,7 @@ class InteractionContextTest {
 
     @Test
     void returnsNullForOutOfRangeAndBlankOptionValues() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "56",
                   "token": "abc",
@@ -249,7 +249,7 @@ class InteractionContextTest {
 
     @Test
     void resolvesEntitiesFromResolvedInteractionData() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "88",
                   "token": "tok",
@@ -293,10 +293,10 @@ class InteractionContextTest {
         InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
         });
 
-        assertEquals("avatar.png", context.optionResolvedAttachment("photo").path("filename").asText());
-        assertEquals("neo", context.optionResolvedUser("target_user").path("username").asText());
-        assertEquals("admin", context.optionResolvedRole("target_role").path("name").asText());
-        assertEquals("general", context.optionResolvedChannel("target_channel").path("name").asText());
+        assertEquals("avatar.png", context.optionResolvedAttachmentValue("photo").filename());
+        assertEquals("neo", context.optionResolvedUserValue("target_user").username());
+        assertEquals("admin", context.optionResolvedRoleValue("target_role").name());
+        assertEquals("general", context.optionResolvedChannelValue("target_channel").name());
 
         ResolvedAttachment attachment = context.optionResolvedAttachmentValue("photo");
         assertEquals("att-1", attachment.id());
@@ -316,13 +316,13 @@ class InteractionContextTest {
         ResolvedChannel channel = context.optionResolvedChannelValue("target_channel");
         assertEquals(0, channel.type());
 
-        assertNull(context.optionResolvedAttachment("missing"));
+        assertNull(context.optionResolvedAttachmentValue("missing"));
         assertNull(context.optionResolvedUserValue("missing"));
     }
 
     @Test
     void resolvesNumericOptionIdsAgainstResolvedMaps() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "88",
                   "token": "tok",
@@ -343,12 +343,12 @@ class InteractionContextTest {
         InteractionContext context = InteractionContext.from(interaction, (id, token, type, data) -> {
         });
 
-        assertEquals("numeric-role", context.optionResolvedRole("target_role").path("name").asText());
+        assertEquals("numeric-role", context.optionResolvedRoleValue("target_role").name());
     }
 
     @Test
     void readsModalFieldValuesFromComponents() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "id": "77",
                   "token": "tok",
@@ -377,7 +377,7 @@ class InteractionContextTest {
 
     @Test
     void rejectsResponsesWithoutInteractionIdentity() throws Exception {
-        JsonNode interaction = MAPPER.readTree("""
+        DiscordInteractionPayload interaction = interaction("""
                 {
                   "type": 2,
                   "data": {
@@ -391,5 +391,9 @@ class InteractionContextTest {
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, context::deferMessage);
         assertTrue(ex.getMessage().contains("id and token"));
+    }
+
+    private static DiscordInteractionPayload interaction(String json) throws Exception {
+        return MAPPER.readValue(json, DiscordInteractionPayload.class);
     }
 }

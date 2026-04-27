@@ -1,6 +1,5 @@
 package com.github.cybellereaper.medusae.commands.core.execute;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.github.cybellereaper.medusae.commands.core.autocomplete.AutocompleteProvider;
 import com.github.cybellereaper.medusae.commands.core.autocomplete.AutocompleteRegistry;
 import com.github.cybellereaper.medusae.commands.core.check.CheckRegistry;
@@ -377,13 +376,6 @@ public final class CommandFramework {
         if (rawValue instanceof String textValue) {
             Object resolvedValue = convertString(textValue, type, parameter.optionName());
             return parameter.wrappedOptional() ? Optional.of(resolvedValue) : resolvedValue;
-        }
-        if (rawValue instanceof JsonNode node) {
-            if (type == String.class) return wrapOptional(parameter, ConversionSupport.parseString(node));
-            if (type == int.class || type == Integer.class) return wrapOptional(parameter, requireNonNullConverted(ConversionSupport.parseInt(node), parameter.optionName(), type));
-            if (type == long.class || type == Long.class) return wrapOptional(parameter, requireNonNullConverted(ConversionSupport.parseLong(node), parameter.optionName(), type));
-            if (type == double.class || type == Double.class) return wrapOptional(parameter, requireNonNullConverted(ConversionSupport.parseDouble(node), parameter.optionName(), type));
-            if (type == boolean.class || type == Boolean.class) return wrapOptional(parameter, requireNonNullConverted(ConversionSupport.parseBooleanStrict(node), parameter.optionName(), type));
         }
         if (rawValue instanceof Number number) {
             if (type == int.class || type == Integer.class) return wrapOptional(parameter, number.intValue());

@@ -1,26 +1,17 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record ResolvedAttachment(
         String id,
         String filename,
+        @JsonProperty("content_type")
         String contentType,
         long size,
         String url,
+        @JsonProperty("proxy_url")
         String proxyUrl
 ) {
-    public static ResolvedAttachment from(JsonNode node) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        return new ResolvedAttachment(
-                node.path("id").asText(null),
-                node.path("filename").asText(null),
-                node.path("content_type").asText(null),
-                node.path("size").asLong(0L),
-                node.path("url").asText(null),
-                node.path("proxy_url").asText(null)
-        );
-    }
 }

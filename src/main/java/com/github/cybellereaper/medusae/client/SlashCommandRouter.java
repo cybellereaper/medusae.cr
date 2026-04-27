@@ -1,6 +1,6 @@
 package com.github.cybellereaper.medusae.client;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import com.github.cybellereaper.medusae.commands.discord.adapter.payload.DiscordInteractionPayload;
 
 import java.util.Arrays;
 import java.util.List;
@@ -13,9 +13,6 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 final class SlashCommandRouter {
-    private static final String DATA_FIELD = "data";
-    private static final String ID_FIELD = "id";
-    private static final String TOKEN_FIELD = "token";
 
     private final Map<String, Consumer<InteractionContext>> slashHandlers = new ConcurrentHashMap<>();
     private final Map<String, Consumer<InteractionContext>> userContextMenuHandlers = new ConcurrentHashMap<>();
@@ -59,32 +56,32 @@ final class SlashCommandRouter {
         return Arrays.stream(values).collect(Collectors.toUnmodifiableMap(keyMapper, Function.identity()));
     }
 
-    void registerSlashHandler(String commandName, Consumer<JsonNode> handler) {
+    void registerSlashHandler(String commandName, Consumer<DiscordInteractionPayload> handler) {
         Objects.requireNonNull(handler, "handler");
         registerSlashContextHandler(commandName, context -> handler.accept(context.raw()));
     }
 
-    void registerComponentHandler(String customId, Consumer<JsonNode> handler) {
+    void registerComponentHandler(String customId, Consumer<DiscordInteractionPayload> handler) {
         Objects.requireNonNull(handler, "handler");
         registerComponentContextHandler(customId, context -> handler.accept(context.raw()));
     }
 
-    void registerModalHandler(String customId, Consumer<JsonNode> handler) {
+    void registerModalHandler(String customId, Consumer<DiscordInteractionPayload> handler) {
         Objects.requireNonNull(handler, "handler");
         registerModalContextHandler(customId, context -> handler.accept(context.raw()));
     }
 
-    void registerAutocompleteHandler(String commandName, Consumer<JsonNode> handler) {
+    void registerAutocompleteHandler(String commandName, Consumer<DiscordInteractionPayload> handler) {
         Objects.requireNonNull(handler, "handler");
         registerAutocompleteContextHandler(commandName, context -> handler.accept(context.raw()));
     }
 
-    void registerUserContextMenuHandler(String commandName, Consumer<JsonNode> handler) {
+    void registerUserContextMenuHandler(String commandName, Consumer<DiscordInteractionPayload> handler) {
         Objects.requireNonNull(handler, "handler");
         registerUserContextMenuContextHandler(commandName, context -> handler.accept(context.raw()));
     }
 
-    void registerMessageContextMenuHandler(String commandName, Consumer<JsonNode> handler) {
+    void registerMessageContextMenuHandler(String commandName, Consumer<DiscordInteractionPayload> handler) {
         Objects.requireNonNull(handler, "handler");
         registerMessageContextMenuContextHandler(commandName, context -> handler.accept(context.raw()));
     }
@@ -123,12 +120,12 @@ final class SlashCommandRouter {
         registerUniqueHandler(messageContextMenuHandlers, commandName, "message context menu", handler::handle);
     }
 
-    void handleInteraction(JsonNode interaction) {
+    void handleInteraction(DiscordInteractionPayload interaction) {
         if (interaction == null) {
             return;
         }
 
-        InteractionType interactionType = InteractionType.fromCode(interaction.path("type").asInt());
+        InteractionType interactionType = InteractionType.fromCode(interaction.typeOrZero());
         switch (interactionType) {
             case PING -> respond(interaction, ResponseType.PONG, null);
             case APPLICATION_COMMAND -> handleApplicationCommand(interaction);
@@ -144,38 +141,38 @@ final class SlashCommandRouter {
         }
     }
 
-    void respondWithMessage(JsonNode interaction, String content) {
+    void respondWithMessage(DiscordInteractionPayload interaction, String content) {
         respondWithMessage(interaction, DiscordMessage.ofContent(content));
     }
 
-    void respondWithMessage(JsonNode interaction, DiscordMessage message) {
+    void respondWithMessage(DiscordInteractionPayload interaction, DiscordMessage message) {
         Objects.requireNonNull(message, "message");
         respond(interaction, ResponseType.CHANNEL_MESSAGE, message.toPayload());
     }
 
-    void respondWithUpdatedMessage(JsonNode interaction, DiscordMessage message) {
+    void respondWithUpdatedMessage(DiscordInteractionPayload interaction, DiscordMessage message) {
         Objects.requireNonNull(message, "message");
         respond(interaction, ResponseType.UPDATE_MESSAGE, message.toPayload());
     }
 
-    void respondWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
+    void respondWithEmbeds(DiscordInteractionPayload interaction, String content, List<DiscordEmbed> embeds) {
         respondWithMessage(interaction, DiscordMessage.ofEmbeds(content, embeds));
     }
 
-    void respondEphemeral(JsonNode interaction, String content) {
+    void respondEphemeral(DiscordInteractionPayload interaction, String content) {
         respondWithMessage(interaction, DiscordMessage.ofContent(content).asEphemeral());
     }
 
-    void respondEphemeralWithEmbeds(JsonNode interaction, String content, List<DiscordEmbed> embeds) {
+    void respondEphemeralWithEmbeds(DiscordInteractionPayload interaction, String content, List<DiscordEmbed> embeds) {
         respondWithMessage(interaction, DiscordMessage.ofEmbeds(content, embeds).asEphemeral());
     }
 
-    void respondWithModal(JsonNode interaction, DiscordModal modal) {
+    void respondWithModal(DiscordInteractionPayload interaction, DiscordModal modal) {
         Objects.requireNonNull(modal, "modal");
         respond(interaction, ResponseType.MODAL, modal.toPayload());
     }
 
-    void respondWithAutocompleteChoices(JsonNode interaction, List<AutocompleteChoice> choices) {
+    void respondWithAutocompleteChoices(DiscordInteractionPayload interaction, List<AutocompleteChoice> choices) {
         Objects.requireNonNull(choices, "choices");
 
         respond(interaction, ResponseType.AUTOCOMPLETE, Map.of(
@@ -183,25 +180,27 @@ final class SlashCommandRouter {
         ));
     }
 
-    void deferMessage(JsonNode interaction) {
+    void deferMessage(DiscordInteractionPayload interaction) {
         respond(interaction, ResponseType.DEFERRED_CHANNEL_MESSAGE, null);
     }
 
-    void deferUpdate(JsonNode interaction) {
+    void deferUpdate(DiscordInteractionPayload interaction) {
         respond(interaction, ResponseType.DEFERRED_MESSAGE_UPDATE, null);
     }
 
-    String getOptionString(JsonNode interaction, String optionName) {
+    String getOptionString(DiscordInteractionPayload interaction, String optionName) {
         return InteractionContext.from(interaction, responder).optionString(optionName);
     }
 
-    String getModalValue(JsonNode interaction, String customId) {
+    String getModalValue(DiscordInteractionPayload interaction, String customId) {
         return InteractionContext.from(interaction, responder).modalValue(customId);
     }
 
-    private void handleApplicationCommand(JsonNode interaction) {
+    private void handleApplicationCommand(DiscordInteractionPayload interaction) {
         CommandType commandType = CommandType.fromCode(
-                interaction.path(DATA_FIELD).path("type").asInt(CommandType.CHAT_INPUT.code())
+                interaction.data() == null || interaction.data().type() == null
+                        ? CommandType.CHAT_INPUT.code()
+                        : interaction.data().type()
         );
 
         Map<String, Consumer<InteractionContext>> handlers = switch (commandType) {
@@ -214,12 +213,15 @@ final class SlashCommandRouter {
     }
 
     private void dispatchByDataField(
-            JsonNode interaction,
+            DiscordInteractionPayload interaction,
             Map<String, Consumer<InteractionContext>> handlers,
             List<Consumer<InteractionContext>> globalHandlers,
             DataField dataField
     ) {
-        String handlerKey = interaction.path(DATA_FIELD).path(dataField.value()).asText("").trim();
+        String handlerKey = switch (dataField) {
+            case NAME -> interaction.data() == null ? "" : stringOrEmpty(interaction.data().name()).trim();
+            case CUSTOM_ID -> interaction.data() == null ? "" : stringOrEmpty(interaction.data().customId()).trim();
+        };
         InteractionContext context = InteractionContext.from(interaction, responder);
         Consumer<InteractionContext> contextHandler = handlers.get(handlerKey);
         if (contextHandler != null) {
@@ -232,21 +234,25 @@ final class SlashCommandRouter {
         }
     }
 
-    private void dispatchByDataField(JsonNode interaction, Map<String, Consumer<InteractionContext>> handlers, DataField dataField) {
+    private void dispatchByDataField(DiscordInteractionPayload interaction, Map<String, Consumer<InteractionContext>> handlers, DataField dataField) {
         dispatchByDataField(interaction, handlers, List.of(), dataField);
     }
 
-    private void respond(JsonNode interaction, ResponseType responseType, Map<String, Object> data) {
+    private void respond(DiscordInteractionPayload interaction, ResponseType responseType, Map<String, Object> data) {
         Objects.requireNonNull(interaction, "interaction");
 
-        String interactionId = interaction.path(ID_FIELD).asText();
-        String interactionToken = interaction.path(TOKEN_FIELD).asText();
+        String interactionId = stringOrEmpty(interaction.id());
+        String interactionToken = stringOrEmpty(interaction.token());
 
         if (interactionId.isBlank() || interactionToken.isBlank()) {
             throw new IllegalArgumentException("interaction must include id and token");
         }
 
         responder.respond(interactionId, interactionToken, responseType.code(), data);
+    }
+
+    private static String stringOrEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private enum InteractionType {

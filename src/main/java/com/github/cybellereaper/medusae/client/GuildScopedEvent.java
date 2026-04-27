@@ -4,10 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record ResolvedUser(
-        String id,
-        String username,
-        @JsonProperty("global_name") String globalName,
-        boolean bot
+public record GuildScopedEvent(
+        @JsonProperty("guild_id") String guildId
 ) {
 }
