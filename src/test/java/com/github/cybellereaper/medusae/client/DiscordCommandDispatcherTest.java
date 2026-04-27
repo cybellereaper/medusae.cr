@@ -132,7 +132,7 @@ class DiscordCommandDispatcherTest {
         dispatcher.dispatchComponent(interaction, context);
 
         assertEquals(1, calls.get());
-        assertEquals(4, responseType.get());
+        assertEquals(7, responseType.get());
         assertEquals(expectedContent, data.get().get("content"));
     }
 
