@@ -66,7 +66,7 @@ class DiscordResponseApplierTest {
 
         new DiscordResponseApplier(context).accept(response);
 
-        assertEquals(4, responder.type);
+        assertEquals(7, responder.type);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> rows = (List<Map<String, Object>>) responder.data.get("components");
         @SuppressWarnings("unchecked")
